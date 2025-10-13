@@ -23,8 +23,38 @@ if (isset($_GET['delete'])) {
     }
 }
 
-// Get all customers
-$customers = $db->getAllCustomers();
+// Pagination setup
+$itemsPerPage = 10;
+$currentPage = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$offset = ($currentPage - 1) * $itemsPerPage;
+
+$searchTerm = "";
+if (isset($_GET['search']) && !empty(trim($_GET['search']))) {
+    $searchTerm = trim($_GET['search']);
+
+    // Prepare and execute search query safely
+    $stmt = $db->getConnection()->prepare("
+        SELECT * FROM customers 
+        WHERE customer_firstname LIKE ? 
+           OR customer_lastname LIKE ? 
+           OR customer_email LIKE ? 
+           OR customer_username LIKE ?
+        ORDER BY cs_created_at DESC
+    ");
+    $stmt->execute(["%$searchTerm%", "%$searchTerm%", "%$searchTerm%", "%$searchTerm%"]);
+    $allCustomers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $totalCustomers = count($allCustomers);
+    
+    // Apply pagination to search results
+    $customers = array_slice($allCustomers, $offset, $itemsPerPage);
+} else {
+    // Get total count for pagination
+    $totalCustomers = count($db->getAllCustomers());
+    $customers = $db->getAllCustomers($itemsPerPage, $offset);
+}
+
+$totalPages = ceil($totalCustomers / $itemsPerPage);
+
 
 // Get unread messages count for badge
 $unreadCount = $db->getUnreadContactCount();
@@ -294,12 +324,12 @@ tbody tr:last-child td {
 }
 
 .btn-delete {
-    background: #ef4444;
+    background: #868686ff;
     color: #fff;
 }
 
 .btn-delete:hover {
-    background: #dc2626;
+    background: #ef4444;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(239,68,68,0.3);
 }
@@ -341,6 +371,46 @@ tbody tr:last-child td {
         overflow-x: auto;
     }
 }
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 30px;
+    padding: 20px 0;
+}
+
+.page-btn {
+    padding: 10px 16px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    background: #f5f5f5;
+    border-color: #000;
+    color: #000;
+}
+
+.page-btn.active {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.page-ellipsis {
+    padding: 10px 8px;
+    color: #999;
+}
 </style>
 </head>
 <body>
@@ -379,12 +449,26 @@ tbody tr:last-child td {
             <?= htmlspecialchars($message) ?>
         </div>
     <?php endif; ?>
-    
+
+    <!-- 🔍 Search Bar -->
+    <form method="get" action="users.php" style="margin-bottom: 20px; display: flex; gap: 10px;">
+        <input type="text" name="search" value="<?= htmlspecialchars($searchTerm) ?>" 
+               placeholder="🔍 Search customer by name, email, or username..." 
+               style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid #ccc; font-size: 14px;">
+        <button type="submit" class="btn" 
+                style="background: #000; color: #fff; border-radius: 8px; padding: 10px 18px; font-weight: 600; cursor: pointer;">
+            Search
+        </button>
+        <?php if (!empty($searchTerm)): ?>
+            <a href="users.php" class="btn" style="background: #e5e7eb; color: #333; padding: 10px 18px; border-radius: 8px; text-decoration: none;">Clear</a>
+        <?php endif; ?>
+    </form>
+
     <div class="customers-table">
         <?php if (empty($customers)): ?>
             <div class="empty-state">
-                <h3>No Customers Yet</h3>
-                <p>Customers will appear here once they register.</p>
+                <h3>No Customers Found</h3>
+                <p><?= !empty($searchTerm) ? "No results for '".htmlspecialchars($searchTerm)."'" : "Customers will appear here once they register." ?></p>
             </div>
         <?php else: ?>
             <table>
@@ -421,15 +505,43 @@ tbody tr:last-child td {
                             <td><?= date('M d, Y', strtotime($customer['cs_created_at'])) ?></td>
                             <td>
                                 <a href="users.php?delete=<?= $customer['customer_id'] ?>" 
-                                   class="btn btn-delete"
-                                   onclick="return confirm('Delete this customer? This will also delete their orders.')">
-                                    Delete
+                                    class="btn btn-delete"
+                                    title="Delete Customer"
+                                    onclick="return confirm('Delete this customer? This will also delete their orders.')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" 
+                                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5-3h4a2 2 0 0 1 2 2v1H8V5a2 2 0 0 1 2-2z"></path>
+                                </svg>
                                 </a>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
+
+            <?php if ($totalPages > 1): ?>
+                <div class="pagination">
+                    <?php if ($currentPage > 1): ?>
+                        <a href="?page=<?= $currentPage - 1 ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" class="page-btn">Previous</a>
+                    <?php endif; ?>
+                    
+                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                        <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
+                            <a href="?page=<?= $i ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" 
+                               class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
+                                <?= $i ?>
+                            </a>
+                        <?php elseif (abs($i - $currentPage) == 3): ?>
+                            <span class="page-ellipsis">...</span>
+                        <?php endif; ?>
+                    <?php endfor; ?>
+                    
+                    <?php if ($currentPage < $totalPages): ?>
+                        <a href="?page=<?= $currentPage + 1 ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" class="page-btn">Next</a>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
 </div>

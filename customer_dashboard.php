@@ -507,7 +507,7 @@ footer p {
         </a>
 <a href="customer_profile.php" class="profile-icon" title="Profile">
     <?php if (!empty($customer['profile_picture']) && file_exists($customer['profile_picture'])): ?>
-        <img src="<?= htmlspecialchars($customer['profile_picture']) ?>" alt="Profile" class="profile-img">
+        <img src="<?= htmlspecialchars($customer['profile_picture']) ?>?v=<?= time() ?>" alt="Profile" class="profile-img">
     <?php else: ?>
         <?= strtoupper(substr($customer['customer_firstname'], 0, 1)) ?>
     <?php endif; ?>

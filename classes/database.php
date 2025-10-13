@@ -117,10 +117,19 @@ public function insert($query, $params = []) {
         }
     }
     
-    public function getAllCustomers() {
-        return $this->select("SELECT customer_id, customer_firstname, customer_lastname, customer_username, customer_email, is_verified, cs_created_at 
+    public function getAllCustomers($limit = null, $offset = 0) {
+        $sql = "SELECT customer_id, customer_firstname, customer_lastname, customer_username, customer_email, is_verified, cs_created_at 
                           FROM customers 
-                          ORDER BY cs_created_at DESC");
+                          ORDER BY cs_created_at DESC";
+        $params = [];
+        
+        if ($limit !== null) {
+            $sql .= " LIMIT ? OFFSET ?";
+            $params[] = (int)$limit;
+            $params[] = (int)$offset;
+        }
+        
+        return $this->select($sql, $params);
     }
     
     // Helper method to delete a record safely by ID
@@ -176,6 +185,10 @@ public function insert($query, $params = []) {
             return "Registration failed. Please try again.";
         }
     }
+    public function getCurrentUserId() {
+        $this->startSession();
+        return $_SESSION['user_id'] ?? null;
+        }
 
     // =================================================================
     // UNIFIED LOGIN (Admins + Customers)
@@ -429,9 +442,18 @@ public function requireRole($role) {
     // ORDER MANAGEMENT METHODS
     // =================================================================
 
-    public function getAllOrders($orderBy = 'o_created_at DESC') {
+    public function getAllOrders($limit = null, $offset = 0, $orderBy = 'o_created_at DESC') {
         try {
-            return $this->select("SELECT * FROM orders ORDER BY {$orderBy}");
+            $sql = "SELECT * FROM orders ORDER BY {$orderBy}";
+            $params = [];
+            
+            if ($limit !== null) {
+                $sql .= " LIMIT ? OFFSET ?";
+                $params[] = (int)$limit;
+                $params[] = (int)$offset;
+            }
+            
+            return $this->select($sql, $params);
         } catch (Exception $e) {
             error_log("Get all orders error: " . $e->getMessage());
             return [];
@@ -454,32 +476,51 @@ public function requireRole($role) {
         );
     }
 
-    public function updateOrderStatus($order_id, $status) {
-        try {
-            // Validate status
-            $validStatuses = ['pending', 'processing', 'out for delivery', 'received', 'cancelled'];
-            if (!in_array($status, $validStatuses)) {
-                return ['success' => false, 'message' => 'Invalid status: ' . $status];
-            }
-
-            $stmt = $this->connection->prepare("UPDATE orders SET order_status = ? WHERE order_id = ?");
-            $stmt->execute([$status, $order_id]);
-
-            if ($stmt->rowCount() > 0) {
-                return ['success' => true, 'message' => 'Order status updated successfully'];
-            } else {
-                // Check if order exists
-                $orderExists = $this->fetch("SELECT order_id FROM orders WHERE order_id = ?", [$order_id]);
-                if (!$orderExists) {
-                    return ['success' => false, 'message' => 'Order not found'];
-                }
-                return ['success' => true, 'message' => 'Order status is already set to this value'];
-            }
-        } catch (Exception $e) {
-            error_log("Update order status error: " . $e->getMessage());
-            return ['success' => false, 'message' => 'Database error: ' . $e->getMessage()];
-        }
+    // Method 1: Add fetchAll method (if not exists)
+public function fetchAll($query, $params = []) {
+    try {
+        $stmt = $this->connection->prepare($query);
+        $stmt->execute($params);
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        error_log("FetchAll query failed: " . $e->getMessage());
+        return [];
     }
+}
+
+// Method 2: UPDATE existing updateOrderStatus to include timestamp
+public function updateOrderStatus($order_id, $status) {
+    try {
+        $validStatuses = ['pending', 'processing', 'out for delivery', 'received', 'cancelled'];
+        $statusLower = strtolower(trim($status));
+        
+        if (!in_array($statusLower, $validStatuses)) {
+            return ['success' => false, 'message' => 'Invalid status: ' . $status];
+        }
+
+        // THIS LINE IS THE KEY CHANGE - adds timestamp tracking
+        $stmt = $this->connection->prepare("
+            UPDATE orders 
+            SET order_status = ?, 
+                status_updated_at = NOW() 
+            WHERE order_id = ?
+        ");
+        $stmt->execute([$status, $order_id]);
+
+        if ($stmt->rowCount() > 0) {
+            return ['success' => true, 'message' => 'Order status updated successfully'];
+        } else {
+            $orderExists = $this->fetch("SELECT order_id FROM orders WHERE order_id = ?", [$order_id]);
+            if (!$orderExists) {
+                return ['success' => false, 'message' => 'Order not found'];
+            }
+            return ['success' => true, 'message' => 'Order status is already set to this value'];
+        }
+    } catch (Exception $e) {
+        error_log("Update order status error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'Database error: ' . $e->getMessage()];
+    }
+}
 
     public function getOrderStatuses() {
         return [
@@ -524,20 +565,26 @@ public function requireRole($role) {
         }
     }
 
-    public function searchOrders($search_term) {
+    public function searchOrders($search_term, $limit = null, $offset = 0) {
         try {
             $search = "%{$search_term}%";
-            return $this->select(
-                "SELECT o.order_id, o.order_status, o.total_amount, o.o_created_at, c.customer_firstname, c.customer_lastname, c.customer_email
+            $sql = "SELECT o.order_id, o.customer_id, o.order_status, o.total_amount, o.o_created_at, c.customer_firstname, c.customer_lastname, c.customer_email
                  FROM orders o
                  JOIN customers c ON o.customer_id = c.customer_id
                  WHERE c.customer_firstname LIKE ? 
                     OR c.customer_lastname LIKE ?
                     OR c.customer_email LIKE ?
                     OR o.order_id LIKE ?
-                 ORDER BY o.o_created_at DESC",
-                [$search, $search, $search, $search]
-            );
+                 ORDER BY o.o_created_at DESC";
+            $params = [$search, $search, $search, $search];
+            
+            if ($limit !== null) {
+                $sql .= " LIMIT ? OFFSET ?";
+                $params[] = (int)$limit;
+                $params[] = (int)$offset;
+            }
+            
+            return $this->select($sql, $params);
         } catch (Exception $e) {
             error_log('Search orders error: ' . $e->getMessage());
             return [];
@@ -791,7 +838,7 @@ public function getCustomerOrderItems($order_id) {
         return $this->fetch("SELECT * FROM perfumes WHERE perfume_id = ?", [$id]);
     }
     
-public function getPerfumes($gender_filter = '', $search_query = '') {
+public function getPerfumes($gender_filter = '', $search_query = '', $limit = null, $offset = 0) {
     $query = "
         SELECT p.*, i.file_path
         FROM perfumes p
@@ -817,6 +864,12 @@ public function getPerfumes($gender_filter = '', $search_query = '') {
     }
 
     $query .= " ORDER BY p.perfume_id DESC";
+
+    if ($limit !== null) {
+        $query .= " LIMIT ? OFFSET ?";
+        $params[] = (int)$limit;
+        $params[] = (int)$offset;
+    }
 
     // Use your existing select() helper
     return $this->select($query, $params);
@@ -1325,5 +1378,11 @@ public function getUnreadContactCount() {
         return 0;
     }
 }
+public function saveAdminReply($messageId, $replyMessage) {
+    $stmt = $this->conn->prepare("UPDATE contact_messages SET admin_reply = ? WHERE id = ?");
+    $stmt->bind_param("si", $replyMessage, $messageId);
+    return $stmt->execute();
+}
+
 }
 ?>

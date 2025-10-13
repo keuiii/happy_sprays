@@ -9,8 +9,15 @@ $db = Database::getInstance();
 $gender_filter = isset($_GET['gender']) ? $_GET['gender'] : '';
 $search_query = isset($_GET['search']) ? $_GET['search'] : '';
 
-// Use centralized method from database.php
-$products = $db->getPerfumes($gender_filter, $search_query);
+// Pagination setup
+$itemsPerPage = 10;
+$currentPage = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$offset = ($currentPage - 1) * $itemsPerPage;
+
+// Get total count for pagination
+$totalProducts = count($db->getPerfumes($gender_filter, $search_query));
+$products = $db->getPerfumes($gender_filter, $search_query, $itemsPerPage, $offset);
+$totalPages = ceil($totalProducts / $itemsPerPage);
 
 // Poster images
 $posters = ["poster1.png","poster2.png", "poster3.png"];
@@ -329,6 +336,38 @@ h1 {text-align:center; margin:30px 0;}
 
 .qv-img-box:hover .quick-view-trigger {
   opacity: 1;
+}
+
+/* Out of Stock Overlay */
+.out-of-stock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity .25s ease;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.product-card:hover .out-of-stock-overlay {
+  opacity: 1;
+}
+
+.product-card.out-of-stock {
+  opacity: 0.85;
+}
+
+.product-card.out-of-stock img {
+  filter: grayscale(20%);
 }
 
 .qv-backdrop[hidden] {
@@ -867,6 +906,47 @@ footer p {
   0% { transform: translateY(0px); }
   100% { transform: translateY(100vh); }
 }
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin: 50px auto 60px;
+    padding: 20px 0;
+}
+
+.page-btn {
+    padding: 10px 16px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    background: #f5f5f5;
+    border-color: #000;
+    color: #000;
+    transform: translateY(-2px);
+}
+
+.page-btn.active {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.page-ellipsis {
+    padding: 10px 8px;
+    color: #999;
+}
 </style>
 </head>
 <body>
@@ -1003,11 +1083,14 @@ $count = 0;
 foreach($products as $prod){
     // gamitin file_path directly
    $imagePath = !empty($prod['file_path']) ? $prod['file_path'] : "images/default.jpg";
+   $isOutOfStock = isset($prod['stock']) && $prod['stock'] <= 0;
+   $outOfStockClass = $isOutOfStock ? 'out-of-stock' : '';
 
 echo "
-<div class='product-card scroll-animate'>
+<div class='product-card scroll-animate {$outOfStockClass}'>
   <div class='qv-img-box'>
     <img src='{$imagePath}' alt='".htmlspecialchars($prod['perfume_name'], ENT_QUOTES)."'>
+    ".($isOutOfStock ? "<div class='out-of-stock-overlay'>OUT OF STOCK</div>" : "
     <button
       class='quick-view-trigger'
       type='button'
@@ -1016,7 +1099,7 @@ echo "
       data-price='{$prod['perfume_price']}'
       data-image='{$imagePath}'
       data-description=\"".htmlspecialchars($prod['perfume_desc'], ENT_QUOTES)."\"
-    >Quick View</button>
+    >Quick View</button>")."
   </div>
   <h2>".htmlspecialchars($prod['perfume_name'])."</h2>
   <p>₱{$prod['perfume_price']}</p>
@@ -1041,6 +1124,29 @@ echo "
 }
 ?>
 </div>
+
+<?php if ($totalPages > 1): ?>
+    <div class="pagination">
+        <?php if ($currentPage > 1): ?>
+            <a href="?page=<?= $currentPage - 1 ?><?= !empty($gender_filter) ? '&gender=' . urlencode($gender_filter) : '' ?><?= !empty($search_query) ? '&search=' . urlencode($search_query) : '' ?>" class="page-btn">Previous</a>
+        <?php endif; ?>
+        
+        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+            <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
+                <a href="?page=<?= $i ?><?= !empty($gender_filter) ? '&gender=' . urlencode($gender_filter) : '' ?><?= !empty($search_query) ? '&search=' . urlencode($search_query) : '' ?>" 
+                   class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
+                    <?= $i ?>
+                </a>
+            <?php elseif (abs($i - $currentPage) == 3): ?>
+                <span class="page-ellipsis">...</span>
+            <?php endif; ?>
+        <?php endfor; ?>
+        
+        <?php if ($currentPage < $totalPages): ?>
+            <a href="?page=<?= $currentPage + 1 ?><?= !empty($gender_filter) ? '&gender=' . urlencode($gender_filter) : '' ?><?= !empty($search_query) ? '&search=' . urlencode($search_query) : '' ?>" class="page-btn">Next</a>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
 
 
 <!-- Footer -->

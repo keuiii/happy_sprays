@@ -744,7 +744,11 @@ footer p {
             </svg>
         </a>
         <a href="customer_profile.php" class="profile-icon active" title="Profile">
-            <?= strtoupper(substr($customer['customer_firstname'], 0, 1)) ?>
+            <?php if (!empty($customer['profile_picture']) && file_exists($customer['profile_picture'])): ?>
+                <img src="<?= htmlspecialchars($customer['profile_picture']) ?>?v=<?= time() ?>" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+            <?php else: ?>
+                <?= strtoupper(substr($customer['customer_firstname'], 0, 1)) ?>
+            <?php endif; ?>
         </a>
         <a href="customer_logout.php" class="logout-btn">Logout</a>
     </div>
@@ -774,7 +778,7 @@ footer p {
     <div class="profile-picture-section">
         <div class="profile-picture-container">
             <?php if (!empty($customer['profile_picture']) && file_exists($customer['profile_picture'])): ?>
-                <img src="<?= htmlspecialchars($customer['profile_picture']) ?>" alt="Profile Picture" class="profile-picture">
+                <img src="<?= htmlspecialchars($customer['profile_picture']) ?>?v=<?= time() ?>" alt="Profile Picture" class="profile-picture">
             <?php else: ?>
                 <div class="profile-picture-placeholder">
                     <?= strtoupper(substr($customer['customer_firstname'], 0, 1)) ?>

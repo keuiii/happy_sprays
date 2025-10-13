@@ -27,7 +27,15 @@ if (isset($_GET['delete'])) {
 $sexFilter = isset($_GET['sex']) ? $_GET['sex'] : null;
 $searchQuery = isset($_GET['search']) ? $_GET['search'] : null;
 
-$products = $db->getPerfumes($sexFilter, $searchQuery);
+// Pagination setup
+$itemsPerPage = 10;
+$currentPage = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$offset = ($currentPage - 1) * $itemsPerPage;
+
+// Get total count for pagination
+$totalProducts = count($db->getPerfumes($sexFilter, $searchQuery));
+$products = $db->getPerfumes($sexFilter, $searchQuery, $itemsPerPage, $offset);
+$totalPages = ceil($totalProducts / $itemsPerPage);
 
 // Get unread messages count for badge
 $unreadCount = $db->getUnreadContactCount();
@@ -439,6 +447,46 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 30px;
+    padding: 20px 0;
+}
+
+.page-btn {
+    padding: 10px 16px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    background: #f5f5f5;
+    border-color: #000;
+    color: #000;
+}
+
+.page-btn.active {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.page-ellipsis {
+    padding: 10px 8px;
+    color: #999;
+}
 </style>
 </head>
 <body>
@@ -549,6 +597,29 @@ body {
                 </div>
             <?php endforeach; ?>
         </div>
+
+        <?php if ($totalPages > 1): ?>
+            <div class="pagination">
+                <?php if ($currentPage > 1): ?>
+                    <a href="?page=<?= $currentPage - 1 ?><?= !empty($sexFilter) ? '&sex=' . urlencode($sexFilter) : '' ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>" class="page-btn">Previous</a>
+                <?php endif; ?>
+                
+                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                    <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
+                        <a href="?page=<?= $i ?><?= !empty($sexFilter) ? '&sex=' . urlencode($sexFilter) : '' ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>" 
+                           class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
+                            <?= $i ?>
+                        </a>
+                    <?php elseif (abs($i - $currentPage) == 3): ?>
+                        <span class="page-ellipsis">...</span>
+                    <?php endif; ?>
+                <?php endfor; ?>
+                
+                <?php if ($currentPage < $totalPages): ?>
+                    <a href="?page=<?= $currentPage + 1 ?><?= !empty($sexFilter) ? '&sex=' . urlencode($sexFilter) : '' ?><?= !empty($searchQuery) ? '&search=' . urlencode($searchQuery) : '' ?>" class="page-btn">Next</a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 

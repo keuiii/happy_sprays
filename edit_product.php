@@ -23,6 +23,10 @@ if (!$product) {
     exit;
 }
 
+// Fetch product images
+$productImages = $db->select("SELECT file_path FROM images WHERE perfume_id = ? LIMIT 1", [$product_id]);
+$currentImage = !empty($productImages) ? $productImages[0]['file_path'] : null;
+
 $error = '';
 $success = '';
 
@@ -49,7 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
         $error = "Stock cannot be negative.";
     } else {
         // Handle image upload (optional)
-        $imageName = $product['image']; // Keep existing image
+        $imageName = null;
+        $uploadedNewImage = false;
+        
         if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
             $allowed = ['jpg', 'jpeg', 'png', 'gif'];
             $filename = $_FILES['image']['name'];
@@ -60,15 +66,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
             } elseif ($_FILES['image']['size'] > 5 * 1024 * 1024) {
                 $error = "Image size must be less than 5MB.";
             } else {
-                // Delete old image
-                if (!empty($product['image']) && file_exists("images/" . $product['image'])) {
-                    unlink("images/" . $product['image']);
-                }
-                
                 $imageName = time() . '_' . uniqid() . '.' . $ext;
                 $uploadPath = "images/" . $imageName;
                 
-                if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadPath)) {
+                if (move_uploaded_file($_FILES['image']['tmp_name'], $uploadPath)) {
+                    $uploadedNewImage = true;
+                } else {
                     $error = "Failed to upload image.";
                 }
             }
@@ -83,10 +86,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
                         perfume_price = ?, 
                         perfume_ml = ?, 
                         sex = ?, 
-                        perfume_descr = ?, 
+                        perfume_desc = ?, 
                         stock = ?, 
-                        scent_family = ?,
-                        image = ?
+                        scent_family = ?
                     WHERE perfume_id = ?",
                     [
                         $data['perfume_name'],
@@ -97,12 +99,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
                         $data['perfume_desc'],
                         $data['stock'],
                         $data['scent_family'],
-                        $imageName,
                         $product_id
                     ]
                 );
                 
                 if ($updated >= 0) {
+                    // Handle image upload to images table if new image was uploaded
+                    if ($uploadedNewImage && !empty($imageName)) {
+                        // Get old images to delete from filesystem
+                        $oldImages = $db->select("SELECT file_path FROM images WHERE perfume_id = ?", [$product_id]);
+                        foreach ($oldImages as $img) {
+                            if (file_exists($img['file_path'])) {
+                                unlink($img['file_path']);
+                            }
+                        }
+                        
+                        // Delete old images from database
+                        $db->delete("DELETE FROM images WHERE perfume_id = ?", [$product_id]);
+                        
+                        // Insert new image
+                        $db->insert(
+                            "INSERT INTO images (perfume_id, file_path) VALUES (?, ?)",
+                            [$product_id, "images/" . $imageName]
+                        );
+                    }
+                    
                     $success = "Product updated successfully!";
                     // Reload product data
                     $product = $db->getProductById($product_id);
@@ -111,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
                 }
             } catch (Exception $e) {
                 error_log("Update product error: " . $e->getMessage());
-                $error = "Failed to update product. Please try again.";
+                $error = "Failed to update product: " . $e->getMessage();
             }
         }
     }
@@ -628,10 +649,10 @@ body {
             
             <div class="form-group">
                 <label for="image">Product Image</label>
-                <?php if (!empty($product['image'])): ?>
+                <?php if (!empty($currentImage)): ?>
                     <div class="current-image">
                         <p>Current Image:</p>
-                        <img src="images/<?= htmlspecialchars($product['image']) ?>" alt="Current">
+                        <img src="<?= htmlspecialchars($currentImage) ?>" alt="Current">
                     </div>
                 <?php endif; ?>
                 <div class="file-input-wrapper">

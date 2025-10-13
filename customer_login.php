@@ -38,6 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     elseif ($usernameOrEmail === 'admin' && $password === 'admin123') {
         $_SESSION['role'] = 'admin';
         $_SESSION['admin_username'] = 'admin';
+        $_SESSION['admin_id'] = 3;
+        
         header("Location: admin_dashboard.php");
         exit;
     } 

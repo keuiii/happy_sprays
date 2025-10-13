@@ -26,8 +26,28 @@ if (isset($_GET['delete'])) {
     exit;
 }
 
-// Get all contact messages
-$messages = $db->getAllContactMessages('created_at DESC');
+// Get all contact messages - sorted by most recent activity (like Messenger)
+$messages = $db->fetchAll("
+    SELECT cm.*, 
+           COALESCE(
+               (SELECT MAX(cr.created_at) FROM contact_replies cr WHERE cr.message_id = cm.id),
+               cm.created_at
+           ) as last_activity,
+           COALESCE(
+               (SELECT cr.reply_message 
+                FROM contact_replies cr 
+                WHERE cr.message_id = cm.id 
+                ORDER BY cr.created_at DESC 
+                LIMIT 1),
+               cm.message
+           ) as latest_message,
+           CASE 
+               WHEN EXISTS(SELECT 1 FROM contact_replies cr WHERE cr.message_id = cm.id) THEN 'You: '
+               ELSE ''
+           END as message_prefix
+    FROM contact_messages cm
+    ORDER BY last_activity DESC
+");
 $unreadCount = $db->getUnreadContactCount();
 
 // Get selected message for conversation view
@@ -43,6 +63,17 @@ if ($selectedId && !empty($messages)) {
     foreach ($messages as $msg) {
         if (isset($msg['id']) && $msg['id'] == $selectedId) {
             $selectedMsg = $msg;
+            
+            // Fetch all replies for this message from contact_replies table
+            $replies = $db->fetchAll(
+                "SELECT reply_id, message_id, admin_id, reply_message, created_at 
+                 FROM contact_replies 
+                 WHERE message_id = ? 
+                 ORDER BY created_at ASC",
+                [$selectedId]
+            );
+            $selectedMsg['replies'] = $replies ?: [];
+            
             // Mark as read when viewing
             if (isset($msg['status']) && $msg['status'] === 'unread') {
                 $db->updateContactMessageStatus($selectedId, 'read');
@@ -630,7 +661,7 @@ if ($selectedId && !empty($messages)) {
         }
 
         .message-bubble.admin .bubble-content {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #000000;
             color: #fff;
             border-bottom-right-radius: 4px;
         }
@@ -879,10 +910,15 @@ if ($selectedId && !empty($messages)) {
                         <div class="user-info">
                             <div class="user-name">
                                 <span><?= isset($msg['name']) ? htmlspecialchars($msg['name']) : 'Unknown' ?></span>
-                                <span class="user-time"><?= isset($msg['created_at']) ? date('g:i A', strtotime($msg['created_at'])) : '' ?></span>
+                                <span class="user-time"><?= isset($msg['last_activity']) ? date('g:i A', strtotime($msg['last_activity'])) : '' ?></span>
                             </div>
                             <div class="user-preview">
-                                <?= isset($msg['message']) ? htmlspecialchars(substr($msg['message'], 0, 60)) . (strlen($msg['message']) > 60 ? '...' : '') : 'No message' ?>
+                                <?php 
+                                $latestMsg = isset($msg['latest_message']) ? $msg['latest_message'] : '';
+                                $prefix = isset($msg['message_prefix']) ? $msg['message_prefix'] : '';
+                                $previewText = $prefix . $latestMsg;
+                                echo htmlspecialchars(substr($previewText, 0, 60)) . (strlen($previewText) > 60 ? '...' : '');
+                                ?>
                             </div>
                         </div>
                         <div class="user-actions">
@@ -894,15 +930,7 @@ if ($selectedId && !empty($messages)) {
                                     <span class="icon">✓</span>
                                     <span>Mark as read</span>
                                 </button>
-                                <button class="user-dropdown-item" onclick="event.preventDefault(); event.stopPropagation(); muteConversation(<?= $msg['id'] ?>);">
-                                    <span class="icon">🔕</span>
-                                    <span>Mute notifications</span>
-                                </button>
                                 <div class="user-dropdown-divider"></div>
-                                <button class="user-dropdown-item" onclick="event.preventDefault(); event.stopPropagation(); archiveConversation(<?= $msg['id'] ?>);">
-                                    <span class="icon">⬇</span>
-                                    <span>Archive chat</span>
-                                </button>
                                 <button class="user-dropdown-item delete" onclick="event.preventDefault(); event.stopPropagation(); deleteConversation(<?= $msg['id'] ?>);">
                                     <span class="icon">✕</span>
                                     <span>Delete chat</span>
@@ -941,15 +969,7 @@ if ($selectedId && !empty($messages)) {
                             <span class="icon">✓</span>
                             <span>Mark as read</span>
                         </button>
-                        <button class="dropdown-item" onclick="muteConversation(<?= isset($selectedMsg['id']) ? $selectedMsg['id'] : 0 ?>);">
-                            <span class="icon">🔕</span>
-                            <span>Mute notifications</span>
-                        </button>
                         <div class="dropdown-divider"></div>
-                        <button class="dropdown-item" onclick="archiveConversation(<?= isset($selectedMsg['id']) ? $selectedMsg['id'] : 0 ?>);">
-                            <span class="icon">⬇</span>
-                            <span>Archive chat</span>
-                        </button>
                         <button class="dropdown-item delete" onclick="deleteConversation(<?= isset($selectedMsg['id']) ? $selectedMsg['id'] : 0 ?>);">
                             <span class="icon">✕</span>
                             <span>Delete chat</span>
@@ -959,7 +979,7 @@ if ($selectedId && !empty($messages)) {
             </div>
 
             <!-- Conversation Body (Messages) -->
-            <div class="conversation-body">
+            <div class="conversation-body" id="conversationBody">
                 <div class="clearfix">
                     <!-- User's Original Message -->
                     <div class="message-bubble user">
@@ -976,7 +996,19 @@ if ($selectedId && !empty($messages)) {
                         <?php endif; ?>
                     </div>
 
-                    <!-- Admin replies would go here (future feature) -->
+                    <!-- Admin Replies (loop through all replies) -->
+                    <?php if (isset($selectedMsg['replies']) && !empty($selectedMsg['replies'])): ?>
+                        <?php foreach ($selectedMsg['replies'] as $reply): ?>
+                            <div class="message-bubble admin">
+                                <div class="bubble-content">
+                                    <?= nl2br(htmlspecialchars($reply['reply_message'])) ?>
+                                </div>
+                                <div class="bubble-time">
+                                    <?= date('M d, Y \a\t g:i A', strtotime($reply['created_at'])) ?>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -1086,47 +1118,28 @@ function sendReply(event, messageId, customerEmail) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show success message
-            const successDiv = document.createElement('div');
-            successDiv.className = 'message-bubble admin';
-            successDiv.innerHTML = `
+            // Create and append new reply bubble
+            const replyDiv = document.createElement('div');
+            replyDiv.className = 'message-bubble admin';
+            replyDiv.innerHTML = `
                 <div class="bubble-content">${replyMessage.replace(/\n/g, '<br>')}</div>
-                <div class="bubble-time">Just now</div>
+                <div class="bubble-time">${data.reply.formatted_time || 'Just now'}</div>
             `;
-            document.querySelector('.conversation-body .clearfix').appendChild(successDiv);
+            document.querySelector('.conversation-body .clearfix').appendChild(replyDiv);
             
             // Clear textarea
             textarea.value = '';
             textarea.style.height = 'auto';
             
-            // Scroll to bottom
-            document.querySelector('.conversation-body').scrollTop = document.querySelector('.conversation-body').scrollHeight;
+            // Scroll to bottom smoothly
+            const conversationBody = document.getElementById('conversationBody');
+            conversationBody.scrollTop = conversationBody.scrollHeight;
             
-            // Show success toast
-            showToast('✅ Reply sent successfully!', 'success');
-            
-            // Update unread badge if exists
-            const badge = document.querySelector('.unread-badge');
-            if (badge) {
-                const currentCount = parseInt(badge.textContent);
-                if (currentCount > 0) {
-                    const newCount = currentCount - 1;
-                    if (newCount > 0) {
-                        badge.textContent = newCount;
-                    } else {
-                        badge.remove();
-                    }
-                }
-            }
-            
-            // Remove unread indicator from current conversation
-            const activeItem = document.querySelector('.user-item.active');
-            if (activeItem) {
-                activeItem.classList.remove('unread');
-                const unreadDot = activeItem.querySelector('.unread-dot');
-                if (unreadDot) {
-                    unreadDot.remove();
-                }
+            // Show success toast with email status
+            if (data.email_sent) {
+                showToast('✅ Reply sent and email delivered!', 'success');
+            } else {
+                showToast('✅ Reply saved successfully!', 'success');
             }
         } else {
             showToast('❌ Failed to send reply: ' + (data.message || 'Unknown error'), 'error');
@@ -1146,7 +1159,7 @@ function sendReply(event, messageId, customerEmail) {
 
 // Scroll conversation to bottom on page load if message is selected
 window.addEventListener('DOMContentLoaded', function() {
-    const conversationBody = document.querySelector('.conversation-body');
+    const conversationBody = document.getElementById('conversationBody');
     if (conversationBody) {
         conversationBody.scrollTop = conversationBody.scrollHeight;
     }
@@ -1187,9 +1200,8 @@ function toggleUserMenu(button) {
 
 function markAsRead(messageId) {
     showToast('✓ Marked as read', 'success');
-    // TODO: Add AJAX call to Mark as read in database
     setTimeout(() => {
-        location.reload();
+        window.location.href = '?mark_read=' + messageId;
     }, 500);
 }
 
@@ -1198,35 +1210,8 @@ function deleteConversation(messageId) {
         showToast('Deleting conversation...', 'success');
         window.location.href = '?delete=' + messageId;
     }
-}
-
-function muteConversation(messageId) {
-    if (confirm('Mute notifications for this conversation?')) {
-        showToast('🔕 Conversation muted', 'success');
-        // TODO: Implement mute functionality in backend
-        // You can add AJAX call here to update mute status in database
-    }
-}
-
-function archiveConversation(messageId) {
-    if (confirm('Archive this conversation?\n\nArchived messages will be moved to a separate "Archived" folder and hidden from the main Messages list. You can view them later by clicking an "Archived" button or filter.')) {
-        showToast('📦 Conversation archived', 'success');
-        // TODO: Implement archive functionality in backend
-        // Add 'archived' column to contact_messages table (TINYINT, default 0)
-        // Create archived_messages.php page to view archived conversations
-        // Filter: WHERE archived = 0 (for main view)
-        // Filter: WHERE archived = 1 (for archived view)
-        setTimeout(() => {
-            location.reload();
-        }, 1000);
-    }
-}
+}   
 </script>
 
 </body>
 </html>
-
-
-
-
-

@@ -48,6 +48,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['place_order'])) {
         
         $files = $_FILES;
         
+        // Save address to profile if checkbox is checked
+        if (isset($_POST['save_address_to_profile']) && $_POST['save_address_to_profile'] == '1') {
+            $db->updateCustomerProfile(
+                $customer['customer_firstname'],
+                $customer['customer_lastname'],
+                $customer['customer_email'],
+                $customer['customer_contact'] ?? '',
+                $_POST['street'] ?? '',
+                $_POST['barangay'] ?? '',
+                $_POST['city'] ?? '',
+                $_POST['province'] ?? '',
+                $_POST['postal_code'] ?? ''
+            );
+        }
+        
         $orderId = $db->processCheckout($data, $files);
         
         header("Location: order_success.php?order_id=" . $orderId);
@@ -154,6 +169,65 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 15px;
+}
+
+/* Address Option Boxes */
+.address-option-box {
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 15px 20px;
+    margin-bottom: 20px;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 15px;
+    color: #333;
+    user-select: none;
+}
+
+.checkbox-container input[type="checkbox"] {
+    display: none;
+}
+
+.checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #000;
+    border-radius: 4px;
+    margin-right: 12px;
+    display: inline-block;
+    position: relative;
+    transition: all 0.3s;
+}
+
+.checkbox-container:hover .checkmark {
+    background: #f0f0f0;
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark {
+    background: #000;
+}
+
+.checkbox-container input[type="checkbox"]:checked + .checkmark:after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 1px;
+    width: 6px;
+    height: 11px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+input[readonly] {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+    color: #666;
 }
 
 .payment-options {
@@ -340,6 +414,20 @@ body {
                 
                 <h2 class="section-title" style="margin-top: 30px;">Delivery Address</h2>
 
+                <?php 
+                $hasProfileAddress = !empty($customer['customer_street']) || !empty($customer['customer_city']);
+                ?>
+                
+                <?php if ($hasProfileAddress): ?>
+                <div class="address-option-box">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="useDifferentAddress" onchange="toggleAddressFields()">
+                        <span class="checkmark"></span>
+                        Use a different delivery address
+                    </label>
+                </div>
+                <?php endif; ?>
+
                 <!-- Button + Hidden Map -->
                 <button type="button" id="useMyLocationBtn" class="use-location-btn">📍 Use My Current Location</button>
                 <div id="map"></div>
@@ -349,34 +437,42 @@ body {
 
                 <div class="form-group">
                     <label for="street">Street Address *</label>
-                    <input type="text" id="street" name="street" value="<?= htmlspecialchars($customer['customer_street'] ?? '') ?>" required>
+                    <input type="text" id="street" name="street" value="<?= htmlspecialchars($customer['customer_street'] ?? '') ?>" required <?= $hasProfileAddress ? 'readonly' : '' ?>>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
                         <label for="barangay">Barangay</label>
-                        <input type="text" id="barangay" name="barangay" value="<?= htmlspecialchars($customer['customer_barangay'] ?? '') ?>">
+                        <input type="text" id="barangay" name="barangay" value="<?= htmlspecialchars($customer['customer_barangay'] ?? '') ?>" <?= $hasProfileAddress ? 'readonly' : '' ?>>
                     </div>
                     <div class="form-group">
                         <label for="city">City *</label>
-                        <input type="text" id="city" name="city" value="<?= htmlspecialchars($customer['customer_city'] ?? '') ?>" required>
+                        <input type="text" id="city" name="city" value="<?= htmlspecialchars($customer['customer_city'] ?? '') ?>" required <?= $hasProfileAddress ? 'readonly' : '' ?>>
                     </div>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
                         <label for="province">Province *</label>
-                        <input type="text" id="province" name="province" value="<?= htmlspecialchars($customer['customer_province'] ?? '') ?>" required>
+                        <input type="text" id="province" name="province" value="<?= htmlspecialchars($customer['customer_province'] ?? '') ?>" required <?= $hasProfileAddress ? 'readonly' : '' ?>>
                     </div>
                     <div class="form-group">
                         <label for="postal_code">Postal Code *</label>
-                        <input type="text" id="postal_code" name="postal_code" value="<?= htmlspecialchars($customer['customer_postal_code'] ?? '') ?>" required>
+                        <input type="text" id="postal_code" name="postal_code" value="<?= htmlspecialchars($customer['customer_postal_code'] ?? '') ?>" required <?= $hasProfileAddress ? 'readonly' : '' ?>>
                     </div>
                 </div>
 
                 <div class="form-group">
                     <label for="landmark">Landmark / Description</label>
                     <input type="text" id="landmark" name="landmark" placeholder="e.g., Blue gate, near 7-Eleven">
+                </div>
+
+                <div class="address-option-box" id="saveAddressOption" style="display: <?= $hasProfileAddress ? 'none' : 'block' ?>;">
+                    <label class="checkbox-container">
+                        <input type="checkbox" name="save_address_to_profile" id="saveAddressToProfile" value="1">
+                        <span class="checkmark"></span>
+                        Save this address to my profile for future orders
+                    </label>
                 </div>
 
                 <h2 class="section-title" style="margin-top: 30px;">Payment Method</h2>
@@ -496,6 +592,51 @@ paymentOptions.forEach(opt => {
     } else {
       gcashSection.style.display = 'none';
       gcashInput.required = false;
+    }
+  });
+});
+
+// Toggle address fields for different delivery address
+function toggleAddressFields() {
+  const checkbox = document.getElementById('useDifferentAddress');
+  const addressFields = ['street', 'barangay', 'city', 'province', 'postal_code'];
+  const saveOption = document.getElementById('saveAddressOption');
+  
+  if (checkbox.checked) {
+    // Enable editing
+    addressFields.forEach(fieldId => {
+      const field = document.getElementById(fieldId);
+      field.removeAttribute('readonly');
+      field.style.backgroundColor = '#fff';
+      field.style.cursor = 'text';
+      field.style.color = '#000';
+    });
+    // Show save option
+    if (saveOption) saveOption.style.display = 'block';
+  } else {
+    // Restore original values and make readonly
+    addressFields.forEach(fieldId => {
+      const field = document.getElementById(fieldId);
+      field.setAttribute('readonly', 'readonly');
+      field.style.backgroundColor = '#f5f5f5';
+      field.style.cursor = 'not-allowed';
+      field.style.color = '#666';
+      // Restore original value from PHP
+      const originalValue = field.getAttribute('data-original') || field.defaultValue;
+      field.value = originalValue;
+    });
+    // Hide save option
+    if (saveOption) saveOption.style.display = 'none';
+  }
+}
+
+// Store original values on page load
+document.addEventListener('DOMContentLoaded', () => {
+  const addressFields = ['street', 'barangay', 'city', 'province', 'postal_code'];
+  addressFields.forEach(fieldId => {
+    const field = document.getElementById(fieldId);
+    if (field) {
+      field.setAttribute('data-original', field.value);
     }
   });
 });

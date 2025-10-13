@@ -78,6 +78,16 @@ $reviews = [
         'color' => '#ffe082'
     ]
 ];
+
+// Pagination setup
+$itemsPerPage = 10;
+$currentPage = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$totalReviews = count($reviews);
+$totalPages = ceil($totalReviews / $itemsPerPage);
+$offset = ($currentPage - 1) * $itemsPerPage;
+
+// Get reviews for current page
+$paginatedReviews = array_slice($reviews, $offset, $itemsPerPage);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -285,6 +295,48 @@ footer p {
     }
 }
 
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin: 30px auto 60px;
+    padding: 20px 0;
+    max-width: 1200px;
+}
+
+.page-btn {
+    padding: 10px 16px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    background: #f5f5f5;
+    border-color: #000;
+    color: #000;
+    transform: translateY(-2px);
+}
+
+.page-btn.active {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.page-ellipsis {
+    padding: 10px 8px;
+    color: #999;
+}
+
   </style>
 </head>
 <body>
@@ -301,7 +353,7 @@ footer p {
   </header>
 
   <div class="reviews-container">
-    <?php foreach ($reviews as $review): ?>
+    <?php foreach ($paginatedReviews as $review): ?>
       <div class="review-card">
         <p class="review-text">"<?= htmlspecialchars($review['text']) ?>"</p>
         <div class="reviewer-info">
@@ -314,6 +366,29 @@ footer p {
       </div>
     <?php endforeach; ?>
   </div>
+
+  <?php if ($totalPages > 1): ?>
+    <div class="pagination">
+        <?php if ($currentPage > 1): ?>
+            <a href="?page=<?= $currentPage - 1 ?>" class="page-btn">Previous</a>
+        <?php endif; ?>
+        
+        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+            <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
+                <a href="?page=<?= $i ?>" 
+                   class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
+                    <?= $i ?>
+                </a>
+            <?php elseif (abs($i - $currentPage) == 3): ?>
+                <span class="page-ellipsis">...</span>
+            <?php endif; ?>
+        <?php endfor; ?>
+        
+        <?php if ($currentPage < $totalPages): ?>
+            <a href="?page=<?= $currentPage + 1 ?>" class="page-btn">Next</a>
+        <?php endif; ?>
+    </div>
+  <?php endif; ?>
 
  <!-- Footer -->
 <footer>

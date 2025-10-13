@@ -17,6 +17,11 @@ $allOrders = $db->getCustomerOrders();
 $dashboardData = $db->getCustomerDashboardData();
 $customer = $dashboardData['customer'];
 
+// Pagination setup
+$itemsPerPage = 10;
+$currentPage = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$offset = ($currentPage - 1) * $itemsPerPage;
+
 // Filter orders by status
 $toReceive = array_filter($allOrders, function($order) {
     $status = strtolower($order['status'] ?? $order['order_status'] ?? '');
@@ -118,25 +123,24 @@ body {
 }
 
 .profile-icon {
-    width: 32px;
-    height: 32px;
+    width: 35px;
+    height: 35px;
     border-radius: 50%;
-    background: #f0f0f0;
+    background: #4caf50;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     transition: all 0.3s;
-    border: 2px solid #e0e0e0;
     text-decoration: none;
-    color: #000;
-    font-weight: 600;
+    color: white;
+    font-weight: bold;
     font-size: 14px;
+    overflow: hidden;
 }
 
 .profile-icon:hover {
-    background: #e0e0e0;
-    border-color: #ccc;
+    background: #45a049;
     transform: scale(1.05);
 }
 
@@ -524,6 +528,47 @@ footer p {
         gap: 40px;
     }
 }
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 30px;
+    padding: 20px 0;
+}
+
+.page-btn {
+    padding: 10px 16px;
+    border: 1px solid #e0e0e0;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 14px;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.page-btn:hover {
+    background: #f5f5f5;
+    border-color: #000;
+    color: #000;
+    transform: translateY(-2px);
+}
+
+.page-btn.active {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.page-ellipsis {
+    padding: 10px 8px;
+    color: #999;
+}
 </style>
 </head>
 <body>
@@ -547,7 +592,11 @@ footer p {
             </svg>
         </a>
         <a href="customer_profile.php" class="profile-icon" title="Profile">
-            <?= strtoupper(substr($customer['customer_firstname'], 0, 1)) ?>
+            <?php if (!empty($customer['profile_picture']) && file_exists($customer['profile_picture'])): ?>
+                <img src="<?= htmlspecialchars($customer['profile_picture']) ?>?v=<?= time() ?>" alt="Profile" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+            <?php else: ?>
+                <?= strtoupper(substr($customer['customer_firstname'], 0, 1)) ?>
+            <?php endif; ?>
         </a>
         <a href="customer_logout.php" class="logout-btn">Logout</a>
     </div>
@@ -609,6 +658,11 @@ footer p {
             $emptyIcon = "❌";
             break;
     }
+    
+    // Apply pagination to the filtered orders
+    $totalOrders = count($displayOrders);
+    $totalPages = ceil($totalOrders / $itemsPerPage);
+    $paginatedOrders = array_slice($displayOrders, $offset, $itemsPerPage);
     ?>
 
     <?php if (empty($displayOrders)): ?>
@@ -620,7 +674,7 @@ footer p {
         </div>
     <?php else: ?>
         <div class="orders-grid">
-            <?php foreach ($displayOrders as $order): 
+            <?php foreach ($paginatedOrders as $order): 
                 $orderId = $order['id'] ?? $order['order_id'] ?? 0;
                 $createdAt = $order['created_at'] ?? $order['o_created_at'] ?? '';
                 $status = $order['status'] ?? $order['order_status'] ?? 'Pending';
@@ -656,6 +710,29 @@ footer p {
                 </a>
             <?php endforeach; ?>
         </div>
+
+        <?php if ($totalPages > 1): ?>
+            <div class="pagination">
+                <?php if ($currentPage > 1): ?>
+                    <a href="?page=<?= $currentPage - 1 ?><?= !empty($activeTab) && $activeTab !== 'all' ? '&tab=' . urlencode($activeTab) : '' ?>" class="page-btn">Previous</a>
+                <?php endif; ?>
+                
+                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                    <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
+                        <a href="?page=<?= $i ?><?= !empty($activeTab) && $activeTab !== 'all' ? '&tab=' . urlencode($activeTab) : '' ?>" 
+                           class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
+                            <?= $i ?>
+                        </a>
+                    <?php elseif (abs($i - $currentPage) == 3): ?>
+                        <span class="page-ellipsis">...</span>
+                    <?php endif; ?>
+                <?php endfor; ?>
+                
+                <?php if ($currentPage < $totalPages): ?>
+                    <a href="?page=<?= $currentPage + 1 ?><?= !empty($activeTab) && $activeTab !== 'all' ? '&tab=' . urlencode($activeTab) : '' ?>" class="page-btn">Next</a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 </div>
 

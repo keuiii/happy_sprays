@@ -181,6 +181,29 @@ body {font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f
 .price { font-size: 28px; font-weight: bold; margin: 20px 0;}
 .ml { font-size: 18px; font-weight: 500; margin: 5px 0 15px; color: #444; }
 
+/* Stock Status */
+.stock-status {
+    font-size: 16px;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 6px;
+    display: inline-block;
+    margin: 10px 0 15px;
+    letter-spacing: 0.5px;
+}
+
+.stock-status.in-stock {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #10b981;
+}
+
+.stock-status.out-of-stock {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #ef4444;
+}
+
 /* Tabs */
 .tabs { margin: 20px 0; display: flex; gap: 15px; border-bottom: 2px solid #000;}
 .tab-btn { padding: 10px 18px; font-size: 15px; font-weight: bold; border: none; background: none; cursor: pointer; transition: 0.3s; border-bottom: 2px solid transparent;}
@@ -191,10 +214,32 @@ body {font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f
 /* Add to Cart button */
 .add-to-cart-btn { padding: 14px 28px; font-size: 16px; font-weight: bold; background: #fff; color: #000; border: 2px solid #000; cursor: pointer; margin-top: 25px; transition: 0.3s; letter-spacing: 1px;}
 .add-to-cart-btn:hover { background: #000; color: #fff; }
+.add-to-cart-btn:disabled {
+    background: #999;
+    color: #fff;
+    border-color: #999;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.add-to-cart-btn:disabled:hover {
+    background: #999;
+    color: #fff;
+}
 
 .qty-box { display: flex; align-items: center; margin-top: 20px; }
 .qty-box button { width: 32px; height: 32px; font-size: 18px; border: 1px solid #000; background: #fff; cursor: pointer; border-radius: 4px;}
+.qty-box button:disabled {
+    background: #f0f0f0;
+    color: #999;
+    border-color: #ccc;
+    cursor: not-allowed;
+}
 .qty-box input { width: 60px; text-align: center; margin: 0 8px; padding: 6px; border: 1px solid #000; border-radius: 4px;}
+.qty-box input:disabled {
+    background: #f0f0f0;
+    color: #999;
+    border-color: #ccc;
+}
 
 /* Divider + Recommendations */
 .divider { max-width: 1200px; margin: 60px auto 40px; border: none; border-top: 1px solid #ccc; }
@@ -325,6 +370,15 @@ footer { background: #e9e9e9; border-top: 1px solid #eee; padding: 60px 20px; te
         <?php if (!empty($product['perfume_ml'])): ?>
             <p class="ml">Size: <?= htmlspecialchars($product['perfume_ml']) ?> ml</p>
         <?php endif; ?>
+        
+        <?php 
+        $isOutOfStock = isset($product['stock']) && $product['stock'] <= 0;
+        if ($isOutOfStock): 
+        ?>
+            <p class="stock-status out-of-stock">⚠️ Out of Stock</p>
+        <?php else: ?>
+            <p class="stock-status in-stock">✓ In Stock (<?= $product['stock'] ?> available)</p>
+        <?php endif; ?>
 
         <div class="tabs">
             <button class="tab-btn active" data-tab="desc">Description</button>
@@ -353,13 +407,13 @@ footer { background: #e9e9e9; border-top: 1px solid #eee; padding: 60px 20px; te
     <input type="hidden" name="image" value="<?= !empty($images[0]) ? htmlspecialchars(trim($images[0])) : 'images/default.jpg' ?>">
 
     <div class="qty-box">
-        <button type="button" onclick="changeQty(-1)">-</button>
-        <input type="number" id="qtyInput" name="qty" value="1" min="1">
-        <button type="button" onclick="changeQty(1)">+</button>
+        <button type="button" onclick="changeQty(-1)" <?= $isOutOfStock ? 'disabled' : '' ?>>-</button>
+        <input type="number" id="qtyInput" name="qty" value="1" min="1" <?= $isOutOfStock ? 'disabled' : '' ?>>
+        <button type="button" onclick="changeQty(1)" <?= $isOutOfStock ? 'disabled' : '' ?>>+</button>
     </div>
 
-    <button type="submit" name="add_to_cart" value="1" class="add-to-cart-btn">
-        ADD TO CART
+    <button type="submit" name="add_to_cart" value="1" class="add-to-cart-btn" <?= $isOutOfStock ? 'disabled' : '' ?>>
+        <?= $isOutOfStock ? 'OUT OF STOCK' : 'ADD TO CART' ?>
     </button>
 </form>
 
