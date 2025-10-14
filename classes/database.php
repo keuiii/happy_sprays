@@ -6,11 +6,12 @@ class Database {
     private $connection;
     
     // Database configuration
-    private $host = 'localhost';
-    private $database = 'happy_sprays';
-    private $username = 'root';
-    private $password = '';
+    private $host = 'mysql.hostinger.com'; // or the host shown in your MySQL page
+    private $database = 'u425676266_happy_sprays';
+    private $username = 'u425676266_jows';
+    private $password = 'GIAjanda9';
     private $charset = 'utf8mb4';
+
     
     // Private constructor to prevent direct instantiation
     private function __construct() {
