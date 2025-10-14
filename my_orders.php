@@ -25,7 +25,7 @@ $offset = ($currentPage - 1) * $itemsPerPage;
 // Filter orders by status
 $toReceive = array_filter($allOrders, function($order) {
     $status = strtolower($order['status'] ?? $order['order_status'] ?? '');
-    return $status === 'shipped';
+    return in_array($status, ['shipped', 'out for delivery', 'received']);
 });
 
 $completed = array_filter($allOrders, function($order) {
@@ -48,6 +48,7 @@ $activeTab = $_GET['tab'] ?? 'all';
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Orders - Happy Sprays</title>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
 * {margin: 0; padding: 0; box-sizing: border-box;}
 
@@ -370,6 +371,53 @@ body {
     color: #000;
 }
 
+/* Confirm Delivery Button */
+.confirm-delivery-btn {
+    margin-top: 15px;
+    padding: 12px 24px;
+    background: #4caf50;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.confirm-delivery-btn:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
+}
+
+.confirm-delivery-btn:active {
+    transform: translateY(0);
+}
+
+.order-card-wrapper {
+    border: 1px solid #e0e0e0;
+    padding: 20px;
+    background: #fff;
+    transition: all 0.3s ease;
+}
+
+.order-card-wrapper:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    border-color: #ccc;
+}
+
+.order-card-content {
+    text-decoration: none;
+    color: #000;
+    display: block;
+    cursor: pointer;
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;
@@ -411,6 +459,60 @@ body {
 
 .shop-btn:hover {
     background: #333;
+}
+
+/* Custom SweetAlert Styling */
+.custom-swal-popup {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    border-radius: 8px !important;
+    padding: 30px !important;
+}
+
+.custom-swal-title {
+    font-family: 'Playfair Display', serif !important;
+    font-size: 28px !important;
+    font-weight: 700 !important;
+    color: #000 !important;
+    margin-bottom: 10px !important;
+}
+
+.custom-swal-confirm {
+    background: #000 !important;
+    color: #fff !important;
+    border: 2px solid #000 !important;
+    padding: 12px 30px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    font-size: 13px !important;
+    letter-spacing: 1px !important;
+    transition: all 0.3s !important;
+    border-radius: 4px !important;
+    margin: 5px !important;
+}
+
+.custom-swal-confirm:hover {
+    background: #333 !important;
+    border-color: #333 !important;
+    transform: translateY(-1px) !important;
+}
+
+.custom-swal-cancel {
+    background: #fff !important;
+    color: #000 !important;
+    border: 2px solid #999 !important;
+    padding: 12px 30px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    font-size: 13px !important;
+    letter-spacing: 1px !important;
+    transition: all 0.3s !important;
+    border-radius: 4px !important;
+    margin: 5px !important;
+}
+
+.custom-swal-cancel:hover {
+    background: #f5f5f5 !important;
+    border-color: #666 !important;
 }
 
 /* Footer */
@@ -465,6 +567,231 @@ footer {
 }
 
 .social-icons a:hover { color: #fff; }
+
+/* Review Modal Styles */
+.review-modal {
+    display: none;
+    position: fixed;
+    z-index: 10000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.review-modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 0;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 550px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: slideDown 0.3s ease;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.review-modal-header {
+    padding: 25px 30px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.review-modal-header h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    margin: 0;
+    color: #000;
+}
+
+.review-close {
+    color: #999;
+    font-size: 32px;
+    font-weight: 300;
+    cursor: pointer;
+    transition: color 0.3s;
+    line-height: 1;
+}
+
+.review-close:hover {
+    color: #000;
+}
+
+.review-modal-body {
+    padding: 30px;
+}
+
+.review-product-info {
+    background: #f8f8f8;
+    padding: 15px;
+    border-radius: 6px;
+    margin-bottom: 25px;
+    border-left: 4px solid #000;
+}
+
+.review-product-info h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 5px 0;
+    color: #000;
+}
+
+.review-product-info p {
+    font-size: 13px;
+    color: #666;
+    margin: 0;
+}
+
+.review-form-group {
+    margin-bottom: 25px;
+}
+
+.review-form-group label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: #000;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.star-rating {
+    display: flex;
+    gap: 8px;
+    font-size: 32px;
+}
+
+.star {
+    cursor: pointer;
+    color: #ddd;
+    transition: all 0.2s;
+}
+
+.star:hover,
+.star.active {
+    color: #ffd700;
+    transform: scale(1.1);
+}
+
+.review-form-group textarea {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 120px;
+    transition: border-color 0.3s;
+}
+
+.review-form-group textarea:focus {
+    outline: none;
+    border-color: #000;
+}
+
+.review-modal-footer {
+    padding: 20px 30px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.review-submit-btn,
+.review-cancel-btn {
+    padding: 12px 30px;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 13px;
+    letter-spacing: 1px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 2px solid;
+}
+
+.review-submit-btn {
+    background: #000;
+    color: #fff;
+    border-color: #000;
+}
+
+.review-submit-btn:hover {
+    background: #333;
+    border-color: #333;
+    transform: translateY(-1px);
+}
+
+.review-submit-btn:disabled {
+    background: #ccc;
+    border-color: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.review-cancel-btn {
+    background: #fff;
+    color: #000;
+    border-color: #999;
+}
+
+.review-cancel-btn:hover {
+    background: #f5f5f5;
+    border-color: #666;
+}
+
+.leave-review-btn {
+    margin-top: 15px;
+    padding: 10px 20px;
+    background: #000;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.leave-review-btn:hover {
+    background: #333;
+    transform: translateY(-1px);
+}
+
+.leave-review-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
 
 footer p {
     margin-top: 20px;
@@ -680,34 +1007,132 @@ footer p {
                 $status = $order['status'] ?? $order['order_status'] ?? 'Pending';
                 $total = $order['total_amount'] ?? $order['total'] ?? 0;
                 $statusClass = strtolower(str_replace(' ', '-', $status));
-            ?>
-                <a href="order_status.php?id=<?= $orderId ?>" class="order-card">
-                    <div class="order-header">
-                        <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
-                        <span class="order-status status-<?= $statusClass ?>">
-                            <?= htmlspecialchars(ucfirst($status)) ?>
-                        </span>
-                    </div>
+                
+                // Check if this is a "To Receive" order
+                $statusLower = strtolower($status);
+                $isToReceive = ($activeTab === 'to-receive' && in_array($statusLower, ['shipped', 'out for delivery', 'received']));
+                $isCompleted = ($activeTab === 'completed' && $statusLower === 'completed');
+                
+                // Check if review button should be shown (within 7 days of completion)
+                $showReviewBtn = false;
+                if ($isCompleted) {
+                    // Use updated_at if available, otherwise use created_at (for testing)
+                    $dateToCheck = !empty($order['updated_at']) ? $order['updated_at'] : $createdAt;
                     
-                    <div class="order-details">
-                        <div class="order-detail">
-                            <span>Order Date</span>
-                            <strong><?= $createdAt ? date("M d, Y", strtotime($createdAt)) : '-' ?></strong>
+                    if (!empty($dateToCheck)) {
+                        try {
+                            $completedDate = new DateTime($dateToCheck);
+                            $now = new DateTime();
+                            $daysDiff = $now->diff($completedDate)->days;
+                            $showReviewBtn = ($daysDiff <= 7);
+                        } catch (Exception $e) {
+                            // If date parsing fails, show button anyway for testing
+                            $showReviewBtn = true;
+                        }
+                    } else {
+                        // No date available, show button anyway for testing
+                        $showReviewBtn = true;
+                    }
+                }
+            ?>
+                <?php if ($isToReceive): ?>
+                    <!-- Wrapper for To Receive orders with Confirm Delivery button -->
+                    <div class="order-card-wrapper">
+                        <a href="order_status.php?id=<?= $orderId ?>" class="order-card-content">
+                            <div class="order-header">
+                                <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
+                                <span class="order-status status-<?= $statusClass ?>">
+                                    <?= htmlspecialchars(ucfirst($status)) ?>
+                                </span>
+                            </div>
+                            
+                            <div class="order-details">
+                                <div class="order-detail">
+                                    <span>Order Date</span>
+                                    <strong><?= $createdAt ? date("M d, Y", strtotime($createdAt)) : '-' ?></strong>
+                                </div>
+                                
+                                <?php if (!empty($order['gcash_proof'])): ?>
+                                <div class="order-detail">
+                                    <span>Payment</span>
+                                    <strong style="color: #198754;">Proof Submitted</strong>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            
+                            <div class="order-total">
+                                <span class="total-label">Total Amount</span>
+                                <span class="total-amount">₱<?= number_format($total, 2) ?></span>
+                            </div>
+                        </a>
+                        <button class="confirm-delivery-btn" onclick="confirmDelivery(<?= $orderId ?>); event.stopPropagation();">
+                            Confirm Delivery
+                        </button>
+                    </div>
+                <?php elseif ($isCompleted && $showReviewBtn): ?>
+                    <!-- Wrapper for Completed orders with Leave a Review button -->
+                    <div class="order-card-wrapper">
+                        <a href="order_status.php?id=<?= $orderId ?>" class="order-card-content">
+                            <div class="order-header">
+                                <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
+                                <span class="order-status status-<?= $statusClass ?>">
+                                    <?= htmlspecialchars(ucfirst($status)) ?>
+                                </span>
+                            </div>
+                            
+                            <div class="order-details">
+                                <div class="order-detail">
+                                    <span>Order Date</span>
+                                    <strong><?= $createdAt ? date("M d, Y", strtotime($createdAt)) : '-' ?></strong>
+                                </div>
+                                
+                                <?php if (!empty($order['gcash_proof'])): ?>
+                                <div class="order-detail">
+                                    <span>Payment</span>
+                                    <strong style="color: #198754;">Proof Submitted</strong>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            
+                            <div class="order-total">
+                                <span class="total-label">Total Amount</span>
+                                <span class="total-amount">₱<?= number_format($total, 2) ?></span>
+                            </div>
+                        </a>
+                        <button class="leave-review-btn" onclick="openReviewModal(<?= $orderId ?>); event.stopPropagation();">
+                            Leave a Review
+                        </button>
+                    </div>
+                <?php else: ?>
+                    <!-- Regular order card for other tabs -->
+                    <a href="order_status.php?id=<?= $orderId ?>" class="order-card">
+                        <div class="order-header">
+                            <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
+                            <span class="order-status status-<?= $statusClass ?>">
+                                <?= htmlspecialchars(ucfirst($status)) ?>
+                            </span>
                         </div>
                         
-                        <?php if (!empty($order['gcash_proof'])): ?>
-                        <div class="order-detail">
-                            <span>Payment</span>
-                            <strong style="color: #198754;">Proof Submitted</strong>
+                        <div class="order-details">
+                            <div class="order-detail">
+                                <span>Order Date</span>
+                                <strong><?= $createdAt ? date("M d, Y", strtotime($createdAt)) : '-' ?></strong>
+                            </div>
+                            
+                            <?php if (!empty($order['gcash_proof'])): ?>
+                            <div class="order-detail">
+                                <span>Payment</span>
+                                <strong style="color: #198754;">Proof Submitted</strong>
+                            </div>
+                            <?php endif; ?>
                         </div>
-                        <?php endif; ?>
-                    </div>
-                    
-                    <div class="order-total">
-                        <span class="total-label">Total Amount</span>
-                        <span class="total-amount">₱<?= number_format($total, 2) ?></span>
-                    </div>
-                </a>
+                        
+                        <div class="order-total">
+                            <span class="total-label">Total Amount</span>
+                            <span class="total-amount">₱<?= number_format($total, 2) ?></span>
+                        </div>
+                    </a>
+                <?php endif; ?>
             <?php endforeach; ?>
         </div>
 
@@ -736,6 +1161,52 @@ footer p {
     <?php endif; ?>
 </div>
 
+<!-- Review Modal -->
+<div id="reviewModal" class="review-modal">
+    <div class="review-modal-content">
+        <div class="review-modal-header">
+            <h2>Leave a Review</h2>
+            <span class="review-close" onclick="closeReviewModal()">&times;</span>
+        </div>
+        <div class="review-modal-body">
+            <div id="reviewProductInfo" class="review-product-info">
+                <!-- Product info will be loaded here -->
+            </div>
+            
+            <form id="reviewForm">
+                <input type="hidden" id="reviewOrderId" name="order_id">
+                <input type="hidden" id="reviewPerfumeId" name="perfume_id">
+                
+                <div class="review-form-group">
+                    <label>Rating *</label>
+                    <div class="star-rating" id="starRating">
+                        <span class="star" data-rating="1">★</span>
+                        <span class="star" data-rating="2">★</span>
+                        <span class="star" data-rating="3">★</span>
+                        <span class="star" data-rating="4">★</span>
+                        <span class="star" data-rating="5">★</span>
+                    </div>
+                    <input type="hidden" id="ratingValue" name="rating" value="0">
+                </div>
+                
+                <div class="review-form-group">
+                    <label for="reviewComment">Your Review *</label>
+                    <textarea 
+                        id="reviewComment" 
+                        name="comment" 
+                        placeholder="Share your experience with this product..."
+                        required
+                    ></textarea>
+                </div>
+            </form>
+        </div>
+        <div class="review-modal-footer">
+            <button type="button" class="review-cancel-btn" onclick="closeReviewModal()">Cancel</button>
+            <button type="button" class="review-submit-btn" onclick="submitReview()">Submit Review</button>
+        </div>
+    </div>
+</div>
+
 <!-- Footer -->
 <footer>
     <div class="footer-columns">
@@ -756,6 +1227,348 @@ footer p {
     </div>
     <p>© 2025 Happy Sprays. All rights reserved.</p>
 </footer>
+
+<script>
+function confirmDelivery(orderId) {
+    // First confirmation dialog
+    Swal.fire({
+        title: 'Confirm Delivery?',
+        html: '<p style="font-size: 15px; color: #555; margin-top: 10px;">Have you received this order?</p>',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#000',
+        cancelButtonColor: '#999',
+        confirmButtonText: 'Yes, I Received It',
+        cancelButtonText: 'Not Yet',
+        customClass: {
+            popup: 'custom-swal-popup',
+            title: 'custom-swal-title',
+            confirmButton: 'custom-swal-confirm',
+            cancelButton: 'custom-swal-cancel'
+        },
+        buttonsStyling: false
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // Show loading state
+            Swal.fire({
+                title: 'Processing...',
+                html: '<p style="font-size: 14px; color: #666;">Confirming your delivery</p>',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                customClass: {
+                    popup: 'custom-swal-popup'
+                },
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+            
+            // Send AJAX request to update order status
+            fetch('ajax/confirm_delivery.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'order_id=' + orderId
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show review prompt
+                    Swal.fire({
+                        title: 'Delivery Confirmed! ✓',
+                        html: '<p style="font-size: 15px; color: #555; margin-top: 10px;">Would you like to leave a review for this product?</p>',
+                        icon: 'success',
+                        showCancelButton: true,
+                        confirmButtonColor: '#000',
+                        cancelButtonColor: '#999',
+                        confirmButtonText: 'Leave a Review',
+                        cancelButtonText: 'Skip for Now',
+                        customClass: {
+                            popup: 'custom-swal-popup',
+                            title: 'custom-swal-title',
+                            confirmButton: 'custom-swal-confirm',
+                            cancelButton: 'custom-swal-cancel'
+                        },
+                        buttonsStyling: false
+                    }).then((reviewResult) => {
+                        if (reviewResult.isConfirmed) {
+                            // Reload page first, then open review modal
+                            window.location.reload();
+                        } else {
+                            // Reload the page to show updated status
+                            window.location.reload();
+                        }
+                    });
+                } else {
+                    Swal.fire({
+                        title: 'Error',
+                        html: '<p style="font-size: 15px; color: #555; margin-top: 10px;">' + (data.message || 'Failed to confirm delivery. Please try again.') + '</p>',
+                        icon: 'error',
+                        confirmButtonColor: '#000',
+                        confirmButtonText: 'OK',
+                        customClass: {
+                            popup: 'custom-swal-popup',
+                            title: 'custom-swal-title',
+                            confirmButton: 'custom-swal-confirm'
+                        },
+                        buttonsStyling: false
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    title: 'Error',
+                    html: '<p style="font-size: 15px; color: #555; margin-top: 10px;">An error occurred. Please try again.</p>',
+                    icon: 'error',
+                    confirmButtonColor: '#000',
+                    confirmButtonText: 'OK',
+                    customClass: {
+                        popup: 'custom-swal-popup',
+                        title: 'custom-swal-title',
+                        confirmButton: 'custom-swal-confirm'
+                    },
+                    buttonsStyling: false
+                });
+            });
+        }
+    });
+}
+
+// Review Modal Functions
+let selectedRating = 0;
+let currentOrderId = 0;
+
+function openReviewModal(orderId) {
+    currentOrderId = orderId;
+    
+    // Fetch order products
+    fetch('ajax/get_order_products.php?order_id=' + orderId)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Order products response:', data); // Debug log
+            
+            if (data.success && data.products && data.products.length > 0) {
+                // For now, show first product (can be enhanced to show multiple)
+                const product = data.products[0];
+                
+                // Check if we have valid product data
+                if (!product.perfume_id || product.perfume_id === 0) {
+                    Swal.fire({
+                        title: 'Error',
+                        html: '<p style="font-size: 15px; color: #555;">Product information not found. Please contact support.</p>',
+                        icon: 'error',
+                        confirmButtonColor: '#000',
+                        customClass: {
+                            popup: 'custom-swal-popup',
+                            confirmButton: 'custom-swal-confirm'
+                        },
+                        buttonsStyling: false
+                    });
+                    return;
+                }
+                
+                document.getElementById('reviewProductInfo').innerHTML = `
+                    <h3>${product.perfume_name || product.product_name || 'Product'}</h3>
+                    <p>${product.perfume_brand || ''}</p>
+                `;
+                document.getElementById('reviewOrderId').value = orderId;
+                document.getElementById('reviewPerfumeId').value = product.perfume_id;
+                document.getElementById('reviewModal').style.display = 'block';
+                document.body.style.overflow = 'hidden';
+            } else {
+                Swal.fire({
+                    title: 'Error',
+                    html: '<p style="font-size: 15px; color: #555;">' + (data.message || 'Unable to load product information.') + '</p>',
+                    icon: 'error',
+                    confirmButtonColor: '#000',
+                    customClass: {
+                        popup: 'custom-swal-popup',
+                        confirmButton: 'custom-swal-confirm'
+                    },
+                    buttonsStyling: false
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+function closeReviewModal() {
+    document.getElementById('reviewModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    document.getElementById('reviewForm').reset();
+    selectedRating = 0;
+    document.querySelectorAll('.star').forEach(star => star.classList.remove('active'));
+}
+
+// Star rating functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const stars = document.querySelectorAll('.star');
+    
+    stars.forEach(star => {
+        star.addEventListener('click', function() {
+            selectedRating = parseInt(this.getAttribute('data-rating'));
+            document.getElementById('ratingValue').value = selectedRating;
+            
+            stars.forEach(s => s.classList.remove('active'));
+            
+            for (let i = 0; i < selectedRating; i++) {
+                stars[i].classList.add('active');
+            }
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            const rating = parseInt(this.getAttribute('data-rating'));
+            stars.forEach((s, index) => {
+                if (index < rating) {
+                    s.style.color = '#ffd700';
+                } else {
+                    s.style.color = selectedRating > index ? '#ffd700' : '#ddd';
+                }
+            });
+        });
+    });
+    
+    document.getElementById('starRating').addEventListener('mouseleave', function() {
+        stars.forEach((s, index) => {
+            s.style.color = selectedRating > index ? '#ffd700' : '#ddd';
+        });
+    });
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function(event) {
+        const modal = document.getElementById('reviewModal');
+        if (event.target === modal) {
+            closeReviewModal();
+        }
+    });
+});
+
+function submitReview() {
+    const rating = document.getElementById('ratingValue').value;
+    const comment = document.getElementById('reviewComment').value.trim();
+    const orderId = document.getElementById('reviewOrderId').value;
+    const perfumeId = document.getElementById('reviewPerfumeId').value;
+    
+    // Validation
+    if (!rating || rating == 0) {
+        Swal.fire({
+            title: 'Rating Required',
+            html: '<p style="font-size: 15px; color: #555;">Please select a rating</p>',
+            icon: 'warning',
+            confirmButtonColor: '#000',
+            customClass: {
+                popup: 'custom-swal-popup',
+                confirmButton: 'custom-swal-confirm'
+            },
+            buttonsStyling: false
+        });
+        return;
+    }
+    
+    if (!comment) {
+        Swal.fire({
+            title: 'Comment Required',
+            html: '<p style="font-size: 15px; color: #555;">Please write a review comment</p>',
+            icon: 'warning',
+            confirmButtonColor: '#000',
+            customClass: {
+                popup: 'custom-swal-popup',
+                confirmButton: 'custom-swal-confirm'
+            },
+            buttonsStyling: false
+        });
+        return;
+    }
+    
+    // Disable submit button
+    const submitBtn = document.querySelector('.review-submit-btn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    
+    // Submit review
+    const formData = new FormData();
+    formData.append('order_id', orderId);
+    formData.append('perfume_id', perfumeId);
+    formData.append('rating', rating);
+    formData.append('comment', comment);
+    
+    fetch('ajax/submit_review.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok: ' + response.status);
+        }
+        return response.text();
+    })
+    .then(text => {
+        console.log('Raw response:', text);
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error('JSON parse error:', e);
+            throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+        }
+        
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Review';
+        
+        if (data.success) {
+            closeReviewModal();
+            Swal.fire({
+                title: 'Review Submitted! ✓',
+                html: '<p style="font-size: 15px; color: #555; margin-top: 10px;">Thank you for your feedback!</p>',
+                icon: 'success',
+                confirmButtonColor: '#000',
+                confirmButtonText: 'OK',
+                customClass: {
+                    popup: 'custom-swal-popup',
+                    title: 'custom-swal-title',
+                    confirmButton: 'custom-swal-confirm'
+                },
+                buttonsStyling: false
+            }).then(() => {
+                window.location.href = 'reviews.php';
+            });
+        } else {
+            Swal.fire({
+                title: 'Error',
+                html: '<p style="font-size: 15px; color: #555;">' + (data.message || 'Failed to submit review') + '</p>',
+                icon: 'error',
+                confirmButtonColor: '#000',
+                customClass: {
+                    popup: 'custom-swal-popup',
+                    confirmButton: 'custom-swal-confirm'
+                },
+                buttonsStyling: false
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Review';
+        
+        Swal.fire({
+            title: 'Error',
+            html: '<p style="font-size: 15px; color: #555;">Error: ' + error.message + '</p>',
+            icon: 'error',
+            confirmButtonColor: '#000',
+            customClass: {
+                popup: 'custom-swal-popup',
+                confirmButton: 'custom-swal-confirm'
+            },
+            buttonsStyling: false
+        });
+    });
+}
+</script>
 
 </body>
 </html>

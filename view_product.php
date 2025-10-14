@@ -211,6 +211,97 @@ body {font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f
 .tab-btn:hover { color: #555;}
 .tab-content { margin-top: 20px; font-size: 15px; line-height: 1.6;}
 
+/* Product Reviews Styles */
+.product-reviews-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 10px;
+}
+
+.product-review-card {
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 20px;
+    transition: 0.2s;
+}
+
+.product-review-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.review-header-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.review-avatar {
+    flex-shrink: 0;
+}
+
+.avatar-img {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.avatar-circle {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 600;
+    color: #333;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.review-info {
+    flex: 1;
+}
+
+.review-customer-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #000;
+    margin-bottom: 2px;
+}
+
+.review-date {
+    font-size: 13px;
+    color: #666;
+}
+
+.review-rating {
+    display: flex;
+    gap: 2px;
+}
+
+.review-rating .star {
+    color: #ddd;
+    font-size: 18px;
+}
+
+.review-rating .star.filled {
+    color: #FFD700;
+}
+
+.review-comment {
+    font-size: 15px;
+    line-height: 1.6;
+    color: #333;
+    font-style: italic;
+}
+
 /* Add to Cart button */
 .add-to-cart-btn { padding: 14px 28px; font-size: 16px; font-weight: bold; background: #fff; color: #000; border: 2px solid #000; cursor: pointer; margin-top: 25px; transition: 0.3s; letter-spacing: 1px;}
 .add-to-cart-btn:hover { background: #000; color: #fff; }
@@ -394,7 +485,52 @@ footer { background: #e9e9e9; border-top: 1px solid #eee; padding: 60px 20px; te
             <p><strong><?= htmlspecialchars($product['perfume_brand']) ?></strong></p>
         </div>
         <div class="tab-content" id="reviews" style="display:none;">
-            <p>No reviews yet. Be the first to review this perfume!</p>
+            <?php
+            // Fetch reviews for this product
+            $productReviews = $db->getProductReviews($product['perfume_id']);
+            
+            if (empty($productReviews)) {
+                echo '<p style="color: #666; font-style: italic;">No reviews yet. Be the first to review this perfume!</p>';
+            } else {
+                echo '<div class="product-reviews-list">';
+                foreach ($productReviews as $review) {
+                    $customerName = htmlspecialchars($review['customer_firstname'] . ' ' . $review['customer_lastname']);
+                    $reviewDate = date('F j, Y', strtotime($review['created_at']));
+                    $rating = intval($review['rating']);
+                    
+                    // Generate profile picture path or colored avatar
+                    $profilePicPath = 'uploads/profiles/' . $review['customer_id'] . '.jpg';
+                    $hasProfilePic = file_exists($profilePicPath);
+                    $initial = strtoupper(substr($review['customer_firstname'], 0, 1));
+                    $colors = ['#ffcdd2', '#f8bbd0', '#e1bee7', '#d1c4e9', '#c5cae9', '#bbdefb', '#b3e5fc', '#b2ebf2', '#b2dfdb', '#c8e6c9', '#dcedc8', '#ffe0b2'];
+                    $colorIndex = $review['customer_id'] % count($colors);
+                    $bgColor = $colors[$colorIndex];
+                    
+                    echo '<div class="product-review-card">';
+                    echo '<div class="review-header-section">';
+                    echo '<div class="review-avatar">';
+                    if ($hasProfilePic) {
+                        echo '<img src="' . htmlspecialchars($profilePicPath) . '?v=' . time() . '" alt="' . $customerName . '" class="avatar-img">';
+                    } else {
+                        echo '<div class="avatar-circle" style="background-color: ' . $bgColor . ';">' . $initial . '</div>';
+                    }
+                    echo '</div>';
+                    echo '<div class="review-info">';
+                    echo '<div class="review-customer-name">' . $customerName . '</div>';
+                    echo '<div class="review-date">' . $reviewDate . '</div>';
+                    echo '</div>';
+                    echo '<div class="review-rating">';
+                    for ($i = 1; $i <= 5; $i++) {
+                        echo '<span class="star' . ($i <= $rating ? ' filled' : '') . '">★</span>';
+                    }
+                    echo '</div>';
+                    echo '</div>';
+                    echo '<div class="review-comment">' . nl2br(htmlspecialchars($review['comment'])) . '</div>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            }
+            ?>
         </div>
         <div class="tab-content" id="shipping" style="display:none;">
             <p>Standard shipping: 3-5 business days.<br>Express shipping: 1-2 business days.</p>

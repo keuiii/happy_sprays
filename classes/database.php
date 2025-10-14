@@ -491,18 +491,17 @@ public function fetchAll($query, $params = []) {
 // Method 2: UPDATE existing updateOrderStatus to include timestamp
 public function updateOrderStatus($order_id, $status) {
     try {
-        $validStatuses = ['pending', 'processing', 'out for delivery', 'received', 'cancelled'];
+        $validStatuses = ['pending', 'processing', 'out for delivery', 'received', 'cancelled', 'completed'];
         $statusLower = strtolower(trim($status));
         
         if (!in_array($statusLower, $validStatuses)) {
             return ['success' => false, 'message' => 'Invalid status: ' . $status];
         }
 
-        // THIS LINE IS THE KEY CHANGE - adds timestamp tracking
+        // Update order status
         $stmt = $this->connection->prepare("
             UPDATE orders 
-            SET order_status = ?, 
-                status_updated_at = NOW() 
+            SET order_status = ?
             WHERE order_id = ?
         ");
         $stmt->execute([$status, $order_id]);
@@ -1382,6 +1381,144 @@ public function saveAdminReply($messageId, $replyMessage) {
     $stmt = $this->conn->prepare("UPDATE contact_messages SET admin_reply = ? WHERE id = ?");
     $stmt->bind_param("si", $replyMessage, $messageId);
     return $stmt->execute();
+}
+
+// ==================== REVIEWS METHODS ====================
+
+public function addReview($orderId, $customerId, $perfumeId, $rating, $comment) {
+    try {
+        // Check if review already exists for this order and product
+        $existing = $this->fetch(
+            "SELECT id FROM reviews WHERE order_id = ? AND customer_id = ? AND perfume_id = ?",
+            [$orderId, $customerId, $perfumeId]
+        );
+        
+        if ($existing) {
+            return ['success' => false, 'message' => 'You have already reviewed this product'];
+        }
+        
+        // Insert review
+        $stmt = $this->connection->prepare("
+            INSERT INTO reviews (order_id, customer_id, perfume_id, rating, comment, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
+        ");
+        $stmt->execute([$orderId, $customerId, $perfumeId, $rating, $comment]);
+        
+        return ['success' => true, 'message' => 'Review submitted successfully'];
+    } catch (Exception $e) {
+        error_log("Add review error: " . $e->getMessage());
+        return ['success' => false, 'message' => 'Failed to submit review'];
+    }
+}
+
+public function getProductReviews($perfumeId) {
+    try {
+        return $this->select("
+            SELECT r.*, c.customer_firstname, c.customer_lastname, c.profile_picture
+            FROM reviews r
+            JOIN customers c ON r.customer_id = c.customer_id
+            WHERE r.perfume_id = ?
+            ORDER BY r.created_at DESC
+        ", [$perfumeId]);
+    } catch (Exception $e) {
+        error_log("Get product reviews error: " . $e->getMessage());
+        return [];
+    }
+}
+
+public function getAllReviews($limit = null, $offset = 0) {
+    try {
+        $query = "
+            SELECT r.*, c.customer_firstname, c.customer_lastname, c.profile_picture,
+                   p.perfume_name, p.perfume_brand
+            FROM reviews r
+            JOIN customers c ON r.customer_id = c.customer_id
+            JOIN perfumes p ON r.perfume_id = p.perfume_id
+            ORDER BY r.created_at DESC
+        ";
+        
+        if ($limit) {
+            $query .= " LIMIT ? OFFSET ?";
+            return $this->select($query, [$limit, $offset]);
+        }
+        
+        return $this->select($query);
+    } catch (Exception $e) {
+        error_log("Get all reviews error: " . $e->getMessage());
+        return [];
+    }
+}
+
+public function hasReviewed($orderId, $customerId, $perfumeId) {
+    try {
+        $result = $this->fetch(
+            "SELECT id FROM reviews WHERE order_id = ? AND customer_id = ? AND perfume_id = ?",
+            [$orderId, $customerId, $perfumeId]
+        );
+        return !empty($result);
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+public function getOrderProducts($orderId) {
+    try {
+        // Get order items first
+        $orderItems = $this->select("SELECT * FROM order_items WHERE order_id = ?", [$orderId]);
+        
+        if (empty($orderItems)) {
+            return [];
+        }
+        
+        // Add perfume details to each item
+        $products = [];
+        foreach ($orderItems as $item) {
+            $productName = $item['product_name'] ?? '';
+            
+            // Try to find matching perfume by name (case-insensitive)
+            $perfume = $this->fetch("
+                SELECT perfume_id, perfume_name, perfume_brand 
+                FROM perfumes 
+                WHERE LOWER(perfume_name) = LOWER(?) 
+                LIMIT 1
+            ", [$productName]);
+            
+            if ($perfume) {
+                $item['perfume_id'] = $perfume['perfume_id'];
+                $item['perfume_name'] = $perfume['perfume_name'];
+                $item['perfume_brand'] = $perfume['perfume_brand'];
+            } else {
+                // Fallback: try partial match
+                $perfume = $this->fetch("
+                    SELECT perfume_id, perfume_name, perfume_brand 
+                    FROM perfumes 
+                    WHERE LOWER(perfume_name) LIKE LOWER(?) 
+                    LIMIT 1
+                ", ['%' . $productName . '%']);
+                
+                if ($perfume) {
+                    $item['perfume_id'] = $perfume['perfume_id'];
+                    $item['perfume_name'] = $perfume['perfume_name'];
+                    $item['perfume_brand'] = $perfume['perfume_brand'];
+                } else {
+                    // Last resort: use first perfume
+                    $anyPerfume = $this->fetch("SELECT perfume_id, perfume_name, perfume_brand FROM perfumes ORDER BY perfume_id LIMIT 1");
+                    if ($anyPerfume) {
+                        $item['perfume_id'] = $anyPerfume['perfume_id'];
+                        $item['perfume_name'] = $productName ?: $anyPerfume['perfume_name'];
+                        $item['perfume_brand'] = $anyPerfume['perfume_brand'];
+                    }
+                }
+            }
+            
+            $products[] = $item;
+        }
+        
+        return $products;
+    } catch (Exception $e) {
+        error_log("Get order products error: " . $e->getMessage());
+        return [];
+    }
 }
 
 }
