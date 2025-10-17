@@ -36,24 +36,24 @@ class Database {
     
     // Create the database connection
     private function connect() {
-        try {
-            $dsn = "mysql:host={$this->host};dbname={$this->database};charset={$this->charset}";
-            $options = [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES => false,
-                PDO::ATTR_PERSISTENT => false,
-            ];
-            $this->connection = new PDO($dsn, $this->username, $this->password, $options);
-        } catch (PDOException $e) {
-            die("Database connection failed: " . $e->getMessage());
-        }
+    try {
+        $dsn = "mysql:host={$this->host};dbname={$this->database};charset={$this->charset}";
+        $options = [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_PERSISTENT => false,
+        ];
+
+        $this->connection = new PDO($dsn, $this->username, $this->password, $options);
+
+        // ✅ Force consistent character set and collation for all queries
+        $this->connection->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+
+    } catch (PDOException $e) {
+        die("Database connection failed: " . $e->getMessage());
     }
-    
-    // Get the PDO connection
-    public function getConnection() {
-        return $this->connection;
-    }
+}
 
     // =================================================================
     // GENERIC QUERY HELPERS
