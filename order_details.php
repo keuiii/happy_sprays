@@ -24,7 +24,7 @@ if (!$order) {
     exit;
 }
 
-// Fetch order items (without worrying about images)
+// Fetch order items
 $orderItems = $db->getCustomerOrderItems($order_id);
 ?>
 
@@ -113,19 +113,25 @@ body { font-family: 'Segoe UI', sans-serif; background:#f5f5f5; color:#111; }
         <?php endforeach; ?>
     </div>
 
+    <?php
+    // ✅ Calculate shipping fee correctly
+    $shipping_fee = isset($order['shipping_fee']) ? floatval($order['shipping_fee']) : 0;
+    $subtotal = floatval($order['total_amount']) - $shipping_fee;
+    ?>
+
     <div class="order-summary">
         <h2 class="section-title">Order Summary</h2>
         <div class="summary-row">
             <span>Subtotal:</span>
-            <span>₱<?= number_format($order['total_amount'],2) ?></span>
+            <span>₱<?= number_format($subtotal, 2) ?></span>
         </div>
         <div class="summary-row">
             <span>Shipping:</span>
-            <span>FREE</span>
+            <span><?= $shipping_fee > 0 ? '₱' . number_format($shipping_fee, 2) : 'FREE' ?></span>
         </div>
         <div class="summary-row total">
             <span>Total:</span>
-            <span>₱<?= number_format($order['total_amount'],2) ?></span>
+            <span>₱<?= number_format($order['total_amount'], 2) ?></span>
         </div>
     </div>
 </div>

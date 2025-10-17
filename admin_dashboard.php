@@ -56,13 +56,37 @@ $topProducts = $db->select("
     LIMIT 5
 ", [$currentYear]);
 
-// Monthly sales data for chart (last 6 months)
+// Monthly sales data for chart (last 12 months by default)
+$reportRange = isset($_GET['range']) ? intval($_GET['range']) : 12;
+$isAllTime = ($reportRange === 0);
 $monthlySales = [];
-for ($i = 5; $i >= 0; $i--) {
-    $month = date('Y-m', strtotime("-$i months"));
-    $monthName = date('M', strtotime("-$i months"));
-    $sales = $db->fetch("SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE DATE_FORMAT(o_created_at, '%Y-%m') = ?", [$month]);
-    $monthlySales[] = ['month' => $monthName, 'sales' => $sales['total']];
+
+if ($isAllTime) {
+    // Get all months with sales data from the beginning
+    $allMonthsData = $db->select("
+        SELECT 
+            DATE_FORMAT(o_created_at, '%Y-%m') as month_key,
+            DATE_FORMAT(o_created_at, '%b %Y') as month_name,
+            COALESCE(SUM(total_amount), 0) as total
+        FROM orders
+        GROUP BY DATE_FORMAT(o_created_at, '%Y-%m')
+        ORDER BY month_key ASC
+    ");
+    
+    foreach ($allMonthsData as $monthData) {
+        $monthlySales[] = [
+            'month' => $monthData['month_name'],
+            'sales' => $monthData['total']
+        ];
+    }
+} else {
+    // Get specific range of months
+    for ($i = ($reportRange - 1); $i >= 0; $i--) {
+        $month = date('Y-m', strtotime("-$i months"));
+        $monthName = date('M Y', strtotime("-$i months"));
+        $sales = $db->fetch("SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE DATE_FORMAT(o_created_at, '%Y-%m') = ?", [$month]);
+        $monthlySales[] = ['month' => $monthName, 'sales' => $sales['total']];
+    }
 }
 
 // Order status distribution
@@ -470,7 +494,7 @@ body {
     font-size: 14px;
 }
 
-/* NEW REPORTS STYLES */
+/* REPORTS STYLES */
 .reports-section {
     margin-top: 40px;
 }
@@ -505,53 +529,143 @@ body {
     margin-bottom: 25px;
 }
 
-.bar-chart {
+.chart-controls {
     display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    height: 250px;
-    gap: 15px;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.range-select {
+    padding: 10px 15px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    background: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.range-select:hover {
+    border-color: #000;
+}
+
+.range-select:focus {
+    outline: none;
+    border-color: #000;
+    box-shadow: 0 0 0 3px rgba(0,0,0,0.1);
+}
+
+.download-btn {
+    padding: 10px 18px;
+    background: #10b981;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
+.download-btn:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.line-chart-container {
+    position: relative;
+    height: 300px;
     padding: 20px 0;
 }
 
-.bar {
+.line-chart {
+    position: relative;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+}
+
+.chart-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.data-points {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    height: 100%;
+    width: 100%;
+    position: relative;
+    z-index: 2;
+}
+
+.data-point {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 10px;
-}
-
-.bar-fill {
-    width: 100%;
-    background: linear-gradient(180deg, #000 0%, #333 100%);
-    border-radius: 8px 8px 0 0;
     position: relative;
+}
+
+.point-dot {
+    width: 12px;
+    height: 12px;
+    background: #000;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    cursor: pointer;
     transition: all 0.3s ease;
-    min-height: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
-.bar-fill:hover {
-    background: linear-gradient(180deg, #333 0%, #555 100%);
-    transform: translateY(-5px);
+.point-dot:hover {
+    width: 16px;
+    height: 16px;
+    background: #333;
+    transform: scale(1.2);
 }
 
-.bar-value {
+.point-value {
     position: absolute;
-    top: -25px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 12px;
+    top: -30px;
+    background: #000;
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
     font-weight: 700;
-    color: #000;
     white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
 }
 
-.bar-label {
-    font-size: 13px;
+.point-dot:hover + .point-value {
+    opacity: 1;
+}
+
+.point-label {
+    font-size: 11px;
     font-weight: 600;
     color: #666;
     text-align: center;
+    transform: rotate(-45deg);
+    transform-origin: top center;
+    margin-top: 20px;
+    white-space: nowrap;
 }
 
 .donut-chart {
@@ -726,10 +840,82 @@ body {
     .stats-grid {
         grid-template-columns: 1fr;
     }
-    .bar-chart {
+    .line-chart-container {
         height: 200px;
-        gap: 8px;
     }
+    .point-label {
+        font-size: 9px;
+    }
+    .chart-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+/* Export Dropdown Styles */
+.export-dropdown {
+    position: relative;
+}
+
+.export-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    min-width: 200px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.export-menu.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.export-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.export-option:last-child {
+    border-bottom: none;
+}
+
+.export-option:hover {
+    background: #f8f8f8;
+    padding-left: 22px;
+}
+
+.export-option.highlight {
+    background: #f0fdf4;
+    color: #059669;
+    font-weight: 600;
+}
+
+.export-option.highlight:hover {
+    background: #dcfce7;
+}
+
+.export-option svg {
+    opacity: 0.5;
+}
+
+.export-option:hover svg {
+    opacity: 1;
 }
 </style>
 </head>
@@ -845,27 +1031,107 @@ body {
         </div>
     </div>
 
-    <!-- NEW REPORTS SECTION -->
+    <!-- REPORTS SECTION -->
     <div class="reports-section">
         <h2 class="section-title">Sales Reports & Analytics</h2>
         
         <div class="reports-grid">
             <!-- Sales Trend Chart -->
             <div class="chart-container">
-                <h3 class="chart-title">Monthly Sales Trend (Last 6 Months)</h3>
-                <div class="bar-chart">
-                    <?php 
-                    $maxSales = max(array_column($monthlySales, 'sales'));
-                    foreach ($monthlySales as $data): 
-                        $height = $maxSales > 0 ? ($data['sales'] / $maxSales) * 100 : 0;
-                    ?>
-                        <div class="bar">
-                            <div class="bar-fill" style="height: <?= $height ?>%">
-                                <div class="bar-value">₱<?= number_format($data['sales'], 0) ?></div>
+                <h3 class="chart-title">Monthly Sales Trend</h3>
+                
+                <div class="chart-controls">
+    <select class="range-select" onchange="window.location.href='?range='+this.value">
+        <option value="1" <?= $reportRange == 1 ? 'selected' : '' ?>>Last 1 Month</option>
+        <option value="3" <?= $reportRange == 3 ? 'selected' : '' ?>>Last 3 Months</option>
+        <option value="6" <?= $reportRange == 6 ? 'selected' : '' ?>>Last 6 Months</option>
+        <option value="9" <?= $reportRange == 9 ? 'selected' : '' ?>>Last 9 Months</option>
+        <option value="12" <?= $reportRange == 12 ? 'selected' : '' ?>>Last 12 Months</option>
+        <option value="0" <?= $reportRange == 0 ? 'selected' : '' ?>>All Time</option>
+    </select>
+    
+    <div class="export-dropdown">
+        <button class="download-btn" onclick="toggleExportMenu()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Export to Excel
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        </button>
+        
+        <div class="export-menu" id="exportMenu">
+            <a href="export_sales_report.php?range=1" class="export-option">
+                <span>Last 1 Month</span>
+            </a>
+            <a href="export_sales_report.php?range=3" class="export-option">
+                <span>Last 3 Months</span>
+            </a>
+            <a href="export_sales_report.php?range=6" class="export-option">
+                <span>Last 6 Months</span>
+            </a>
+            <a href="export_sales_report.php?range=9" class="export-option">
+                <span>Last 9 Months</span>
+            </a>
+            <a href="export_sales_report.php?range=12" class="export-option">
+                <span>Last 12 Months</span>
+            </a>
+            <a href="export_sales_report.php?range=0" class="export-option highlight">
+                <span>All Time Data</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+            </a>
+        </div>
+    </div>
+</div>
+                
+                <div class="line-chart-container">
+                    <svg class="chart-line" viewBox="0 0 100 100" preserveAspectRatio="none">
+                        <defs>
+                            <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" style="stop-color:#000;stop-opacity:0.3" />
+                                <stop offset="100%" style="stop-color:#000;stop-opacity:0" />
+                            </linearGradient>
+                        </defs>
+                        <?php
+                        $maxSales = max(array_column($monthlySales, 'sales'));
+                        if ($maxSales == 0) $maxSales = 1; // Prevent division by zero
+                        $points = [];
+                        $pathData = "M ";
+                        $areaData = "M 0 100 ";
+                        
+                        foreach ($monthlySales as $index => $data) {
+                            $x = count($monthlySales) > 1 ? ($index / (count($monthlySales) - 1)) * 100 : 50;
+                            $y = $maxSales > 0 ? 100 - (($data['sales'] / $maxSales) * 90) : 100;
+                            $points[] = ['x' => $x, 'y' => $y];
+                            $pathData .= "$x $y ";
+                            $areaData .= "L $x $y ";
+                        }
+                        $areaData .= "L 100 100 Z";
+                        ?>
+                        <path d="<?= $areaData ?>" fill="url(#lineGradient)" />
+                        <polyline points="<?= implode(' ', array_map(function($p) { return $p['x'].','.$p['y']; }, $points)) ?>" 
+                                  fill="none" stroke="#000" stroke-width="0.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    
+                    <div class="data-points">
+                        <?php foreach ($monthlySales as $index => $data): 
+                            $y = $maxSales > 0 ? (($data['sales'] / $maxSales) * 90) : 0;
+                        ?>
+                            <div class="data-point">
+                                <div style="height: <?= $y ?>%; display: flex; align-items: flex-end;">
+                                    <div class="point-dot"></div>
+                                    <div class="point-value">₱<?= number_format($data['sales'], 2) ?></div>
+                                </div>
+                                <div class="point-label"><?= $data['month'] ?></div>
                             </div>
-                            <div class="bar-label"><?= $data['month'] ?></div>
-                        </div>
-                    <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             </div>
 
@@ -933,6 +1199,21 @@ body {
         </div>
     </div>
 </div>
+<script>
+function toggleExportMenu() {
+    const menu = document.getElementById('exportMenu');
+    menu.classList.toggle('show');
+}
 
+// Close dropdown when clicking outside
+document.addEventListener('click', function(event) {
+    const dropdown = document.querySelector('.export-dropdown');
+    const menu = document.getElementById('exportMenu');
+    
+    if (!dropdown.contains(event.target)) {
+        menu.classList.remove('show');
+    }
+});
+</script>
 </body>
 </html>

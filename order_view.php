@@ -296,11 +296,11 @@ body {
             <div style="margin-top: 20px;">
                 <div class="summary-row">
                     <span>Subtotal:</span>
-                    <span>₱<?= number_format($order['total_amount'], 2) ?></span>
+                    <span>₱<?= number_format($order['total_amount'] - $order['shipping_fee'], 2) ?></span>
                 </div>
                 <div class="summary-row">
                     <span>Shipping:</span>
-                    <span>FREE</span>
+                    <span>₱<?= number_format($order['shipping_fee'], 2) ?></span>
                 </div>
                 <div class="summary-row total">
                     <span>Total:</span>

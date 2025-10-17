@@ -728,6 +728,42 @@ $unreadCount = $db->getUnreadContactCount();
             padding: 10px 8px;
             color: #999;
         }
+
+        .proof-modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.proof-content {
+    position: relative;
+    background: #fff;
+    padding: 15px;
+    border-radius: 10px;
+    max-width: 90%;
+    max-height: 90%;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+}
+
+.proof-content img {
+    max-width: 100%;
+    max-height: 80vh;
+    border-radius: 10px;
+}
+
+.close-proof {
+    position: absolute;
+    top: 8px; right: 15px;
+    font-size: 28px;
+    cursor: pointer;
+    color: #333;
+}
+
     </style>
 </head>
 <body>
@@ -755,154 +791,192 @@ $unreadCount = $db->getUnreadContactCount();
     </div>
 </div>
 
-    <div class="main-content">
-        <div class="top-bar">
-            <h1 class="page-title">Order Management</h1>
-            <div class="welcome-text">Manage all customer orders</div>
+<div class="main-content">
+    <div class="top-bar">
+        <h1 class="page-title">Order Management</h1>
+        <div class="welcome-text">Manage all customer orders</div>
+    </div>
+    
+    <?php if (!empty($message)): ?>
+        <div class="alert alert-<?= $messageType ?>">
+            <?= htmlspecialchars($message) ?>
         </div>
-        
-        <?php if (!empty($message)): ?>
-            <div class="alert alert-<?= $messageType ?>">
-                <?= htmlspecialchars($message) ?>
-            </div>
-        <?php endif; ?>
-        
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">Total Orders</div>
-                <div class="stat-value"><?= $stats['total_orders'] ?></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Processing</div>
-                <div class="stat-value"><?= $stats['processing'] ?? 0 ?></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Out for Delivery</div>
-                <div class="stat-value"><?= $stats['out for delivery'] ?? 0 ?></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Received</div>
-                <div class="stat-value"><?= $stats['received'] ?? 0 ?></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Cancelled</div>
-                <div class="stat-value"><?= $stats['cancelled'] ?? 0 ?></div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">Total Revenue</div>
-                <div class="stat-value">₱<?= number_format($stats['total_revenue'], 2) ?></div>
-            </div>
+    <?php endif; ?>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Orders</div>
+            <div class="stat-value"><?= $stats['total_orders'] ?></div>
         </div>
-        
-        <div class="search-bar">
-            <form method="GET">
-                <input type="text" name="search" placeholder="🔍 Search by customer name, email, or order ID..." value="<?= htmlspecialchars($searchTerm) ?>">
-            </form>
+        <div class="stat-card">
+            <div class="stat-label">Processing</div>
+            <div class="stat-value"><?= $stats['processing'] ?? 0 ?></div>
         </div>
-        
-        <div class="orders-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Order ID</th>
-                        <th>Customer</th>
-                        <th>Total Amount</th>
-                        <th>Status</th>
-                        <th>Order Date</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (empty($orders)): ?>
-                        <tr>
-                            <td colspan="6" class="empty-state">
-                                <h3>No Orders Found</h3>
-                                <p>Orders will appear here once customers place them.</p>
-                            </td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($orders as $order): ?>
-                            <tr>
-                                <td><strong>#<?= $order['order_id'] ?></strong></td>
-                                <td>
-                                    <?php 
-                                    $customer = $db->fetch("SELECT customer_firstname, customer_lastname FROM customers WHERE customer_id = ?", [$order['customer_id']]);
-                                    echo htmlspecialchars($customer['customer_firstname'] . ' ' . $customer['customer_lastname']);
-                                    ?>
-                                </td>
-                                <td><strong>₱<?= number_format($order['total_amount'], 2) ?></strong></td>
-                                <td>
-                                    <form method="POST" style="display: inline;">
-                                        <input type="hidden" name="order_id" value="<?= $order['order_id'] ?>">
-                                        <select name="status" onchange="this.form.submit()">
-                                            <?php 
-                                            foreach ($db->getOrderStatuses() as $key => $label): 
-                                            ?>
-                                                <option value="<?= htmlspecialchars($key) ?>" <?= strtolower(trim($order['order_status'])) === strtolower(trim($key)) ? 'selected' : '' ?>>
-                                                    <?= htmlspecialchars($label) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <input type="hidden" name="update_status" value="1">
-                                    </form>
-                                </td>
-                                <td><?= date('M d, Y', strtotime($order['o_created_at'])) ?></td>
-                                <td>
-                                <a href="order_view.php?id=<?= $order['order_id'] ?>" 
-                                class="btn btn-view" 
-                                title="View Order Details">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                </svg>
-                                </a>
-                            </td>
-
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-
-            <?php if ($totalPages > 1): ?>
-                <div class="pagination">
-                    <?php if ($currentPage > 1): ?>
-                        <a href="?page=<?= $currentPage - 1 ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" class="page-btn">Previous</a>
-                    <?php endif; ?>
-                    
-                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                        <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
-                            <a href="?page=<?= $i ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" 
-                               class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
-                                <?= $i ?>
-                            </a>
-                        <?php elseif (abs($i - $currentPage) == 3): ?>
-                            <span class="page-ellipsis">...</span>
-                        <?php endif; ?>
-                    <?php endfor; ?>
-                    
-                    <?php if ($currentPage < $totalPages): ?>
-                        <a href="?page=<?= $currentPage + 1 ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" class="page-btn">Next</a>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
+        <div class="stat-card">
+            <div class="stat-label">Out for Delivery</div>
+            <div class="stat-value"><?= $stats['out for delivery'] ?? 0 ?></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Received</div>
+            <div class="stat-value"><?= $stats['received'] ?? 0 ?></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Cancelled</div>
+            <div class="stat-value"><?= $stats['cancelled'] ?? 0 ?></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Total Revenue</div>
+            <div class="stat-value">₱<?= number_format($stats['total_revenue'], 2) ?></div>
         </div>
     </div>
+    
+    <div class="search-bar">
+        <form method="GET">
+            <input type="text" name="search" placeholder="🔍 Search by customer name, email, or order ID..." value="<?= htmlspecialchars($searchTerm) ?>">
+        </form>
+    </div>
+    
+    <div class="orders-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Total Amount</th>
+                    <th>Payment</th>
+                    <th>Gcash-Proof</th>
+                    <th>Status</th>
+                    <th>Order Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($orders)): ?>
+                    <tr>
+                        <td colspan="8" class="empty-state">
+                            <h3>No Orders Found</h3>
+                            <p>Orders will appear here once customers place them.</p>
+                        </td>
+                    </tr>
+                <?php else: ?>
+                    <?php foreach ($orders as $order): ?>
+                        <tr>
+                            <td><strong>#<?= $order['order_id'] ?></strong></td>
+                            <td>
+                                <?php 
+                                $customer = $db->fetch("SELECT customer_firstname, customer_lastname FROM customers WHERE customer_id = ?", [$order['customer_id']]);
+                                echo htmlspecialchars($customer['customer_firstname'] . ' ' . $customer['customer_lastname']);
+                                ?>
+                            </td>
+                            <td><strong>₱<?= number_format($order['total_amount'], 2) ?></strong></td>
+
+                            <td><?= htmlspecialchars($order['payment_method']) ?></td>
+
+                            <td>
+                                <?php if ($order['payment_method'] === 'GCash' && !empty($order['gcash_proof'])): ?>
+                                    <button class="btn btn-proof" onclick="viewProof('<?= htmlspecialchars($order['gcash_proof']) ?>')">
+                                        See Proof
+                                    </button>
+                                <?php else: ?>
+                                    <span style="color:#888;">—</span>
+                                <?php endif; ?>
+                            </td>
+
+                            <td>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="order_id" value="<?= $order['order_id'] ?>">
+                                    <select name="status" onchange="this.form.submit()">
+                                        <?php foreach ($db->getOrderStatuses() as $key => $label): ?>
+                                            <option value="<?= htmlspecialchars($key) ?>" <?= strtolower(trim($order['order_status'])) === strtolower(trim($key)) ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars($label) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <input type="hidden" name="update_status" value="1">
+                                </form>
+                            </td>
+
+                            <td><?= date('M d, Y', strtotime($order['o_created_at'])) ?></td>
+
+                            <td>
+                                <a href="order_view.php?id=<?= $order['order_id'] ?>" 
+                                   class="btn btn-view" 
+                                   title="View Order Details">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                    </svg>
+                                </a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
+
+        <?php if ($totalPages > 1): ?>
+            <div class="pagination">
+                <?php if ($currentPage > 1): ?>
+                    <a href="?page=<?= $currentPage - 1 ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" class="page-btn">Previous</a>
+                <?php endif; ?>
+                
+                <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                    <?php if ($i == 1 || $i == $totalPages || abs($i - $currentPage) <= 2): ?>
+                        <a href="?page=<?= $i ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" 
+                           class="page-btn <?= $i == $currentPage ? 'active' : '' ?>">
+                            <?= $i ?>
+                        </a>
+                    <?php elseif (abs($i - $currentPage) == 3): ?>
+                        <span class="page-ellipsis">...</span>
+                    <?php endif; ?>
+                <?php endfor; ?>
+                
+                <?php if ($currentPage < $totalPages): ?>
+                    <a href="?page=<?= $currentPage + 1 ?><?= !empty($searchTerm) ? '&search=' . urlencode($searchTerm) : '' ?>" class="page-btn">Next</a>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- ✅ Proof Modal -->
+<div id="proofModal" class="proof-modal" style="display:none;">
+    <div class="proof-content">
+        <span class="close-proof" onclick="closeProof()">&times;</span>
+        <img id="proofImage" src="" alt="GCash Proof">
+    </div>
+</div>
 
 <script>
-// Auto-dismiss alert after 3 seconds
+// Auto-dismiss alert
 document.addEventListener('DOMContentLoaded', function() {
     const alert = document.querySelector('.alert');
     if (alert) {
-        setTimeout(function() {
+        setTimeout(() => {
             alert.style.transition = 'opacity 0.5s ease';
             alert.style.opacity = '0';
-            setTimeout(function() {
-                alert.style.display = 'none';
-            }, 500);
+            setTimeout(() => alert.remove(), 500);
         }, 3000);
     }
 });
+
+// View proof modal
+function viewProof(filename) {
+    const modal = document.getElementById('proofModal');
+    const img = document.getElementById('proofImage');
+    img.src = 'uploads/proofs/' + filename;
+    modal.style.display = 'flex';
+}
+
+function closeProof() {
+    document.getElementById('proofModal').style.display = 'none';
+}
+
+// Close modal when clicking outside
+window.onclick = function(e) {
+    const modal = document.getElementById('proofModal');
+    if (e.target === modal) modal.style.display = 'none';
+};
 </script>
 
 </body>

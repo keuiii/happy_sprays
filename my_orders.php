@@ -1038,7 +1038,7 @@ footer p {
                 <?php if ($isToReceive): ?>
                     <!-- Wrapper for To Receive orders with Confirm Delivery button -->
                     <div class="order-card-wrapper">
-                        <a href="order_status.php?id=<?= $orderId ?>" class="order-card-content">
+                        <a href="order_details.php?id=<?= $orderId ?>" class="order-card-content">
                             <div class="order-header">
                                 <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
                                 <span class="order-status status-<?= $statusClass ?>">
@@ -1072,7 +1072,7 @@ footer p {
                 <?php elseif ($isCompleted && $showReviewBtn): ?>
                     <!-- Wrapper for Completed orders with Leave a Review button -->
                     <div class="order-card-wrapper">
-                        <a href="order_status.php?id=<?= $orderId ?>" class="order-card-content">
+                        <a href="order_details.php?id=<?= $orderId ?>" class="order-card-content">
                             <div class="order-header">
                                 <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
                                 <span class="order-status status-<?= $statusClass ?>">
@@ -1105,7 +1105,7 @@ footer p {
                     </div>
                 <?php else: ?>
                     <!-- Regular order card for other tabs -->
-                    <a href="order_status.php?id=<?= $orderId ?>" class="order-card">
+                    <a href="order_details.php?id=<?= $orderId ?>" class="order-card">
                         <div class="order-header">
                             <div class="order-number">Order #<?= str_pad($orderId, 6, '0', STR_PAD_LEFT) ?></div>
                             <span class="order-status status-<?= $statusClass ?>">
@@ -1163,49 +1163,49 @@ footer p {
 
 <!-- Review Modal -->
 <div id="reviewModal" class="review-modal">
-    <div class="review-modal-content">
-        <div class="review-modal-header">
-            <h2>Leave a Review</h2>
-            <span class="review-close" onclick="closeReviewModal()">&times;</span>
-        </div>
-        <div class="review-modal-body">
-            <div id="reviewProductInfo" class="review-product-info">
-                <!-- Product info will be loaded here -->
-            </div>
-            
-            <form id="reviewForm">
-                <input type="hidden" id="reviewOrderId" name="order_id">
-                <input type="hidden" id="reviewPerfumeId" name="perfume_id">
-                
-                <div class="review-form-group">
-                    <label>Rating *</label>
-                    <div class="star-rating" id="starRating">
-                        <span class="star" data-rating="1">★</span>
-                        <span class="star" data-rating="2">★</span>
-                        <span class="star" data-rating="3">★</span>
-                        <span class="star" data-rating="4">★</span>
-                        <span class="star" data-rating="5">★</span>
-                    </div>
-                    <input type="hidden" id="ratingValue" name="rating" value="0">
-                </div>
-                
-                <div class="review-form-group">
-                    <label for="reviewComment">Your Review *</label>
-                    <textarea 
-                        id="reviewComment" 
-                        name="comment" 
-                        placeholder="Share your experience with this product..."
-                        required
-                    ></textarea>
-                </div>
-            </form>
-        </div>
-        <div class="review-modal-footer">
-            <button type="button" class="review-cancel-btn" onclick="closeReviewModal()">Cancel</button>
-            <button type="button" class="review-submit-btn" onclick="submitReview()">Submit Review</button>
-        </div>
+  <div class="review-modal-content">
+    <div class="review-modal-header">
+      <h2>Leave a Review</h2>
+      <span class="review-close" onclick="closeReviewModal()">&times;</span>
     </div>
+    <div class="review-modal-body">
+      <div id="reviewProductInfo" class="review-product-info"></div>
+
+      <form id="reviewForm" enctype="multipart/form-data">
+        <input type="hidden" id="reviewOrderId" name="order_id">
+        <input type="hidden" id="reviewPerfumeId" name="perfume_id">
+
+        <div class="review-form-group">
+          <label>Rating *</label>
+          <div class="star-rating" id="starRating">
+            <span class="star" data-rating="1">★</span>
+            <span class="star" data-rating="2">★</span>
+            <span class="star" data-rating="3">★</span>
+            <span class="star" data-rating="4">★</span>
+            <span class="star" data-rating="5">★</span>
+          </div>
+          <input type="hidden" id="ratingValue" name="rating" value="0">
+        </div>
+
+        <div class="review-form-group">
+          <label for="reviewComment">Your Review *</label>
+          <textarea id="reviewComment" name="comment" placeholder="Share your experience..." required></textarea>
+        </div>
+
+        <div class="review-form-group">
+          <label for="reviewImage">Add Image (optional)</label>
+          <input type="file" id="reviewImage" name="review_image" accept="image/*">
+        </div>
+      </form>
+    </div>
+    <div class="review-modal-footer">
+      <button type="button" class="review-cancel-btn" onclick="closeReviewModal()">Cancel</button>
+      <button type="button" class="review-submit-btn" onclick="submitReview()">Submit Review</button>
+    </div>
+  </div>
 </div>
+
+
 
 <!-- Footer -->
 <footer>
@@ -1567,6 +1567,38 @@ function submitReview() {
             buttonsStyling: false
         });
     });
+}
+
+document.querySelectorAll('.star').forEach(star => {
+  star.addEventListener('click', function() {
+    const rating = this.getAttribute('data-rating');
+    document.getElementById('ratingValue').value = rating;
+    document.querySelectorAll('.star').forEach(s => s.classList.remove('selected'));
+    this.classList.add('selected');
+    let prev = this.previousElementSibling;
+    while (prev) { prev.classList.add('selected'); prev = prev.previousElementSibling; }
+  });
+});
+
+function submitReview() {
+  const form = document.getElementById('reviewForm');
+  const formData = new FormData(form);
+
+  fetch('save_review.php', {
+    method: 'POST',
+    body: formData
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      alert('✅ Review submitted successfully!');
+      closeReviewModal();
+      form.reset();
+    } else {
+      alert('⚠️ ' + data.message);
+    }
+  })
+  .catch(() => alert('⚠️ Something went wrong!'));
 }
 </script>
 

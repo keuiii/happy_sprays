@@ -344,14 +344,63 @@ body {font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:#f
 .recommend-item p { font-size: 14px; margin-bottom: 12px; color: #444; }
 
 /* Footer */
-footer { background: #e9e9e9; border-top: 1px solid #eee; padding: 60px 20px; text-align: center; font-size: 14px; color: #555; margin-top: 60px; }
-.footer-columns { display: flex; justify-content: center; gap: 120px; margin-bottom: 30px; }
-.footer-columns h4 { font-size: 16px; margin-bottom: 12px; font-weight: bold; color: #000; }
-.footer-columns a { display: block; text-decoration: none; color: #555; margin: 6px 0; }
-.footer-columns a:hover { color: #000; }
-.social-icons { margin-top: 25px; }
-.social-icons a { margin: 0 10px; color: #555; text-decoration: none; font-size: 18px; }
-.social-icons a:hover { color: #000; }
+footer {
+    background: #000;
+    border-top: 1px solid #000;
+    padding: 40px 20px;
+    text-align: center;
+    font-size: 14px;
+    color: #fff;
+    margin-top: 60px;
+}
+
+.footer-columns {
+    display: flex;
+    justify-content: center;
+    gap: 80px;
+    margin-bottom: 25px;
+    flex-wrap: wrap;
+}
+
+.footer-columns h4 {
+    font-size: 14px;
+    margin-bottom: 12px;
+    font-weight: 700;
+    color: #fff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.footer-columns a {
+    display: block;
+    text-decoration: none;
+    color: #ccc;
+    margin: 6px 0;
+    font-size: 13px;
+    transition: color 0.3s;
+}
+
+.footer-columns a:hover { color: #fff; }
+
+.social-icons { 
+    margin-top: 20px; 
+}
+
+.social-icons a {
+    margin: 0 10px;
+    color: #ccc;
+    text-decoration: none;
+    font-size: 14px;
+    transition: color 0.3s;
+}
+
+.social-icons a:hover { color: #fff; }
+
+footer p {
+    margin-top: 20px;
+    color: #999;
+    font-size: 12px;
+}
 
 /* Custom SweetAlert Styling */
 .custom-swal-popup {
@@ -399,16 +448,6 @@ footer { background: #e9e9e9; border-top: 1px solid #eee; padding: 60px 20px; te
 <div class="top-nav">
   <div class="logo">Happy Sprays</div>
   <div class="nav-actions">
-    <!-- Cart Icon with Bubble -->
-    <a href="cart.php" class="cart-link" style="position:relative">
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M6 7h12l1 12H5L6 7z"/>
-        <path d="M9 7V5a3 3 0 0 1 6 0v2"/>
-      </svg>
-      <span style="position:absolute; top:-8px; right:-8px; background:red; color:#fff; font-size:12px; font-weight:bold; width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center;">
-      <?= isset($_SESSION['cart']) ? count($_SESSION['cart']) : 0 ?>
-      </span>
-    </a>
 
     <!-- Profile Icon -->
     <?php
@@ -424,11 +463,12 @@ footer { background: #e9e9e9; border-top: 1px solid #eee; padding: 60px 20px; te
   </div>
 </div>
 
+
 <div class="sub-nav" id="subNav">
     <a href="index.php">HOME</a>
     <a href="index.php?gender=Male">For Him</a>
     <a href="index.php?gender=Female">For Her</a>
-    <a href="reviews.php">REVIEWS</a>
+    <a href="contact.php">CONTACT</a>
 </div>
 
 <div class="back-btn-bar" id="backBtnBar">

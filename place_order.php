@@ -5,9 +5,10 @@ $db = Database::getInstance();
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $customer_id = $_SESSION['customer_id'] ?? 0; // 0 if guest
+
+    // ===== Basic Info =====
     $name     = trim($_POST['name']);
     $email    = trim($_POST['email']);
-    // Address fields should be combined (as in checkout.php): street, city, province, postal
     $street   = trim($_POST['street'] ?? '');
     $city     = trim($_POST['city'] ?? '');
     $province = trim($_POST['province'] ?? '');
@@ -15,6 +16,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $address  = $street . ', ' . $city . ', ' . $province . ' ' . $postal;
     $payment  = trim($_POST['payment']);
 
+    // ===== Shipping Fee =====
+    $shipping_fee = isset($_POST['shipping_fee']) ? floatval($_POST['shipping_fee']) : 0.00;
+
+    // ===== GCash Proof Upload =====
     $gcash_proof = NULL;
     if ($payment === "gcash" && isset($_FILES['gcash_ref']) && $_FILES['gcash_ref']['error'] == 0) {
         $targetDir = "uploads/";
@@ -28,22 +33,33 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     }
 
-    $grand_total = 0;
+    // ===== Compute Subtotal and Total =====
+    $subtotal = 0;
     foreach ($_SESSION['cart'] as $item) {
-        $grand_total += $item['price'] * $item['quantity'];
+        $subtotal += $item['price'] * $item['quantity'];
     }
+    $total_amount = $subtotal + $shipping_fee;
 
-    // Insert into orders
+    // ===== Insert into orders =====
     $params = [
-        $customer_id, $name, $email, $address, $payment, $grand_total, $gcash_proof
+        $customer_id, 
+        $name, 
+        $email, 
+        $address, 
+        $payment, 
+        $total_amount, 
+        $shipping_fee,
+        $gcash_proof
     ];
-    $sql = "INSERT INTO orders (customer_id, customer_name, email, address, payment_method, total_amount, gcash_proof, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
+
+    $sql = "INSERT INTO orders 
+            (customer_id, customer_name, email, address, payment_method, total_amount, shipping_fee, gcash_proof, o_created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+
     $order_id = $db->insert($sql, $params);
 
-    // Insert order items
+    // ===== Insert Order Items =====
     foreach ($_SESSION['cart'] as $item) {
-
         $pname = $item['name'];
         $qty   = intval($item['quantity']);
         $price = floatval($item['price']);
@@ -56,6 +72,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         );
     }
 
+    // ===== Clear Cart and Redirect =====
     unset($_SESSION['cart']);
     header("Location: receipt.php?order_id=$order_id");
     exit;

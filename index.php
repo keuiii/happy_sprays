@@ -7,21 +7,62 @@ $db = Database::getInstance();
 
 // Handle filters
 $gender_filter = isset($_GET['gender']) ? $_GET['gender'] : '';
-$search_query = isset($_GET['search']) ? $_GET['search'] : '';
+$search_query = isset($_GET['q']) ? trim($_GET['q']) : '';
 
 // Pagination setup
 $itemsPerPage = 10;
 $currentPage = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
 $offset = ($currentPage - 1) * $itemsPerPage;
 
-// Get total count for pagination
-$totalProducts = count($db->getPerfumes($gender_filter, $search_query));
-$products = $db->getPerfumes($gender_filter, $search_query, $itemsPerPage, $offset);
+// Build base query dynamically
+$params = [];
+$where = "WHERE 1=1";
+
+if (!empty($gender_filter)) {
+    $where .= " AND p.sex = ?";
+    $params[] = $gender_filter;
+}
+
+if (!empty($search_query)) {
+    $where .= " AND (p.perfume_name LIKE ? OR p.perfume_brand LIKE ? OR p.perfume_desc LIKE ?)";
+    $params[] = "%$search_query%";
+    $params[] = "%$search_query%";
+    $params[] = "%$search_query%";
+}
+
+// ✅ Count query with JOIN (for pagination)
+$countQuery = "
+    SELECT COUNT(DISTINCT p.perfume_id) AS total 
+    FROM perfumes p
+    LEFT JOIN images i ON p.perfume_id = i.perfume_id AND i.image_type = 'perfume'
+    $where
+";
+$totalProducts = $db->select($countQuery, $params)[0]['total'] ?? 0;
+
+// ✅ Actual product query (with image)
+$productQuery = "
+    SELECT 
+        p.*, 
+        i.file_path 
+    FROM perfumes p
+    LEFT JOIN images i ON p.perfume_id = i.perfume_id AND i.image_type = 'perfume'
+    $where
+    GROUP BY p.perfume_id
+    ORDER BY p.perfume_name ASC
+    LIMIT ? OFFSET ?
+";
+$params[] = (int)$itemsPerPage;
+$params[] = (int)$offset;
+
+$products = $db->select($productQuery, $params);
+
 $totalPages = ceil($totalProducts / $itemsPerPage);
 
 // Poster images
-$posters = ["poster1.png","poster2.png", "poster3.png"];
+$posters = ["poster1.png","poster2.png","poster3.png"];
 ?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -515,7 +556,7 @@ h1 {text-align:center; margin:30px 0;}
   color: #000;
 }
 
-/* Search Panel */
+/* Search Panel (Slide from Right) */
 .search-panel {
   position: fixed;
   top: 0;
@@ -575,6 +616,10 @@ h1 {text-align:center; margin:30px 0;}
 #suggestions {
   display: none;
   margin-top: 10px;
+  position: relative;
+  z-index: 10002;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 #suggestions div {
@@ -591,6 +636,13 @@ h1 {text-align:center; margin:30px 0;}
 
 #suggestions div:hover {
   background: #f5f5f5;
+}
+
+#suggestions img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 5px;
 }
 
 /* Chat Button */
@@ -956,13 +1008,15 @@ footer p {
 <div class="top-nav">
   <div class="logo">Happy Sprays</div>
   <div class="nav-actions">
-    <!-- Search Icon -->
-    <button id="openSearch" class="icon-btn" type="button">
-      <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="11" cy="11" r="8"></circle>
-        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-      </svg>
-    </button>
+
+
+<!-- 🔍 Search Icon Button -->
+<button id="openSearch" class="icon-btn" type="button">
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="11" cy="11" r="8"></circle>
+    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+  </svg>
+</button>
 
     <!-- Cart Icon with Bubble -->
     <a href="cart.php" class="cart-link" style="position:relative">
@@ -989,10 +1043,10 @@ footer p {
   </div>
 </div>
 
-<!-- Sliding Search Panel -->
+<!-- 🔎 Sliding Search Panel -->
 <div id="searchPanel" class="search-panel">
   <button id="closeSearch" class="close-btn">&times;</button>
-  <form action="index.php" method="GET" class="search-form">
+  <form onsubmit="return handleSearchSubmit(event)" class="search-form">
     <input type="text" id="liveSearch" name="q" placeholder="Search perfumes..." autocomplete="off" />
     <button type="submit">Search</button>
     <div id="suggestions"></div>
@@ -1004,7 +1058,7 @@ footer p {
     <a href="index.php">HOME</a>
     <a href="index.php?gender=Male">For Him</a>
     <a href="index.php?gender=Female">For Her</a>
-    <a href="reviews.php">REVIEWS</a>
+    <a href="contact.php">CONTACT</a>
 </div>
 
 <!-- Hero Slider -->
@@ -1024,11 +1078,12 @@ footer p {
 <!-- Marquee -->
 <div class="marquee">
     <div class="marquee-content">
-        <span><img src="images/icon1.png" width="20" alt=""> Happy Sprays – New Fragrances</span>
-        <span><img src="images/icon2.png" width="20" alt=""> Happy Sprays – Free Delivery</span>
-        <span><img src="images/icon3.png" width="20" alt=""> Happy Sprays – Limited Edition</span>
+        <span>🎄 Happy Sprays – Merry Christmas!</span>
+        <span>✨ Wishing You a Fragrant Holiday Season!</span>
+        <span>🎁 Enjoy Special Holiday Scents from Happy Sprays!</span>
     </div>
 </div>
+
 
 <!-- QUICK VIEW MODAL -->
 <div id="qvBackdrop" class="qv-backdrop" hidden>
@@ -1225,56 +1280,33 @@ const handleScrollAnimation = () => {
 window.addEventListener('scroll', handleScrollAnimation);
 window.addEventListener('load', handleScrollAnimation);
 
-// Search Panel open/close
 document.addEventListener("DOMContentLoaded", () => {
-    const openBtn = document.getElementById("openSearch");
-    const closeBtn = document.getElementById("closeSearch");
-    const searchPanel = document.getElementById("searchPanel");
+  const openBtn = document.getElementById("openSearch");
+  const closeBtn = document.getElementById("closeSearch");
+  const searchPanel = document.getElementById("searchPanel");
 
-    if(openBtn && closeBtn && searchPanel){
-        openBtn.addEventListener("click", () => {
-          searchPanel.classList.add("active");
-        });
-        closeBtn.addEventListener("click", () => {
-          searchPanel.classList.remove("active");
-        });
-    }
+  // ✅ Open and close search panel animation
+  if (openBtn && closeBtn && searchPanel) {
+    openBtn.addEventListener("click", () => {
+      searchPanel.classList.add("active");
+      const input = searchPanel.querySelector("input[name='q']");
+      if (input) setTimeout(() => input.focus(), 200);
+    });
+
+    closeBtn.addEventListener("click", () => {
+      searchPanel.classList.remove("active");
+    });
+  }
 });
 
-// Live Search Suggestions
-const searchInput = document.getElementById("liveSearch"); 
-const suggestionsBox = document.getElementById("suggestions");
-
-if(searchInput){
-  searchInput.addEventListener("keyup", function() {
-    let query = this.value.trim();
-    if (query.length === 0) {
-      suggestionsBox.style.display = "none";  
-      return;
-    }
-
-    fetch("search_suggest.php?q=" + encodeURIComponent(query))
-      .then(res => res.json())
-      .then(data => {
-        suggestionsBox.innerHTML = "";
-        if (data.length > 0) {
-          data.forEach(item => {
-            let div = document.createElement("div");
-            div.innerHTML = `
-              ${item.image ? `<img src="images/${item.image}" width="40" height="40" style="border-radius:4px;object-fit:cover;">` : ""}
-              <span><strong>${item.name}</strong><br><small>₱${item.price}</small></span>
-            `;
-            div.onclick = () => {
-              window.location.href = "view_product.php?id=" + item.id;
-            };
-            suggestionsBox.appendChild(div);
-          });
-          suggestionsBox.style.display = "block";
-        } else {
-          suggestionsBox.style.display = "none";
-        }
-      });
-  });
+// Handle search submit manually
+function handleSearchSubmit(e) {
+  e.preventDefault();
+  const q = document.getElementById("liveSearch").value.trim();
+  if (q.length > 0) {
+    window.location.href = "index.php?q=" + encodeURIComponent(q);
+  }
+  return false;
 }
 
 // Quick View + Cart Bubble Logic (FIXED)

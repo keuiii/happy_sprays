@@ -1,8 +1,10 @@
 <?php
+// This file is for registration email verification only.
+// Do NOT use for password reset. Password reset OTP is handled in forgot_password.php.
+
 session_start();
 require_once 'classes/database.php';
 
-// Move these to the top of the file
 require __DIR__ . '/PHPMailer/src/Exception.php';
 require __DIR__ . '/PHPMailer/src/PHPMailer.php';
 require __DIR__ . '/PHPMailer/src/SMTP.php';
@@ -32,11 +34,9 @@ if ($otp_resent) {
 $customer = $db->fetch("SELECT otp_expires FROM customers WHERE customer_email = ?", [$email]);
 $otp_expires = $customer ? $customer['otp_expires'] : null;
 
-// Handle OTP verification
-// Accept either an explicit submit (verify_otp) or an auto-submitted form that includes only 'otp'
+// Handle OTP verification for registration only
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['verify_otp']) || (isset($_POST['otp']) && !isset($_POST['resend_otp'])))) {
     $entered_otp = trim($_POST['otp']);
-    
     if (empty($entered_otp)) {
         $error = "Please enter the OTP code.";
     } else {
@@ -46,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['verify_otp']) || (is
                 "SELECT * FROM customers WHERE customer_email = ? AND verification_code = ? LIMIT 1",
                 [$email, $entered_otp]
             );
-            
             if (!$customer) {
                 $error = "Invalid OTP code. Please check and try again.";
             } else {
@@ -54,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['verify_otp']) || (is
                 $current_time = date("Y-m-d H:i:s");
                 if ($current_time > $customer['otp_expires']) {
                     $error = "OTP code has expired. Please register again.";
-                    
                     // Optionally delete the unverified account
                     $db->delete("DELETE FROM customers WHERE customer_email = ?", [$email]);
                     unset($_SESSION['pending_email']);
@@ -65,13 +63,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['verify_otp']) || (is
                         "UPDATE customers SET is_verified = 1, verification_code = NULL, otp_expires = NULL WHERE customer_email = ?",
                         [$email]
                     );
-                    
                     $success = "Email verified successfully! You can now login.";
-                    
                     // Clear session
                     unset($_SESSION['pending_email']);
                     unset($_SESSION['pending_customer_id']);
-                    
                     // Redirect to login after 2 seconds
                     header("refresh:2;url=customer_login.php");
                 }

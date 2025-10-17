@@ -1,43 +1,156 @@
 <?php
 require_once 'classes/database.php';
+require_once __DIR__ . '/PHPMailer/src/PHPMailer.php';
+require_once __DIR__ . '/PHPMailer/src/SMTP.php';
+require_once __DIR__ . '/PHPMailer/src/Exception.php';
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 session_start();
 
 $conn = Database::getInstance()->getConnection();
 $msg = "";
+$step = 1;
+$username_or_email = '';
+$otp = '';
+$email = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Step 1: Enter email/username
+if (isset($_POST['step']) && $_POST['step'] == '1') {
     $username_or_email = trim($_POST['username_or_email']);
+    if ($username_or_email === "") {
+        $msg = "⚠️ Please enter your email or username.";
+    } else {
+        $stmt = $conn->prepare("SELECT customer_id, customer_email, customer_firstname, customer_lastname FROM customers WHERE customer_username = ? OR customer_email = ? LIMIT 1");
+        $stmt->execute([$username_or_email, $username_or_email]);
+        $customer = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($customer) {
+            $otp = rand(100000, 999999);
+            $expires_at = date('Y-m-d H:i:s', strtotime('+10 minutes'));
+            $stmt = $conn->prepare("INSERT INTO password_resets (customer_id, otp, expires_at) VALUES (?, ?, ?)");
+            $stmt->execute([$customer['customer_id'], $otp, $expires_at]);
+            // DEBUG: Show last inserted OTP row
+            $stmt = $conn->prepare("SELECT * FROM password_resets WHERE customer_id = ? ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$customer['customer_id']]);
+            $lastOtpRow = $stmt->fetch(PDO::FETCH_ASSOC);
+            echo '<div style="color:blue;font-size:13px;">DEBUG: Last inserted OTP row: ' . htmlspecialchars(json_encode($lastOtpRow)) . '</div>';
+
+            // Send OTP via PHPMailer
+            $mail = new PHPMailer(true);
+            try {
+                $mail->isSMTP();
+                $mail->Host = 'smtp.hostinger.com';
+                $mail->SMTPAuth = true;
+                $mail->Username = 'happyspray@happyspray.shop';
+                $mail->Password = 'JANJANbuen@5';
+                $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                $mail->Port = 465;
+                $mail->setFrom('happyspray@happyspray.shop', 'Happy Sprays');
+                $mail->addAddress($customer['customer_email'], $customer['customer_firstname'] . ' ' . $customer['customer_lastname']);
+                $mail->isHTML(true);
+                $mail->Subject = 'Your Happy Sprays Password Reset OTP';
+                $mail->Body = "<h3>Password Reset OTP</h3>"
+                    . "Hello {$customer['customer_firstname']} {$customer['customer_lastname']},<br><br>"
+                    . "Here is your OTP code for password reset:<br><br>"
+                    . "<b>{$otp}</b><br><br>"
+                    . "This code will expire in 10 minutes.<br><br>Best regards,<br>Happy Sprays Team";
+                $mail->send();
+                $msg = "✅ OTP sent to your email. Please check your inbox.";
+                $_SESSION['reset_customer_id'] = $customer['customer_id'];
+                $_SESSION['reset_email'] = $customer['customer_email'];
+                $step = 2;
+            } catch (Exception $e) {
+                $msg = "❌ Could not send email. Mailer Error: {$mail->ErrorInfo}";
+            }
+        } else {
+            $msg = "❌ Account not found.";
+        }
+    }
+}
+
+// Step 2: Enter OTP
+elseif (isset($_POST['step']) && $_POST['step'] == '2') {
+    $otp = trim($_POST['otp']);
+    if ($otp === "") {
+        $msg = "⚠️ Please enter the OTP.";
+        $step = 2;
+    } else {
+        $customer_id = $_SESSION['reset_customer_id'] ?? null;
+        if ($customer_id) {
+            // DEBUG: Show values being checked
+            echo '<div style="color:red;font-size:13px;">DEBUG: customer_id=' . htmlspecialchars($customer_id) . ', otp=' . htmlspecialchars($otp) . '</div>';
+            // DEBUG: List all unused, unexpired OTPs for this customer
+            $stmt = $conn->prepare("SELECT otp, expires_at, used FROM password_resets WHERE customer_id = ? AND used = 0 AND expires_at > NOW() ORDER BY id DESC");
+            $stmt->execute([$customer_id]);
+            $allOtps = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            echo '<div style="color:red;font-size:13px;">DEBUG: All unused, unexpired OTPs: ' . htmlspecialchars(json_encode($allOtps)) . '</div>';
+
+            // Fetch the OTP row (don't rely on DB NOW() to avoid timezone mismatches)
+            $stmt = $conn->prepare("SELECT * FROM password_resets WHERE customer_id = ? AND otp = ? AND used = 0 ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$customer_id, $otp]);
+            $reset = $stmt->fetch(PDO::FETCH_ASSOC);
+            // DEBUG: Show query result
+            echo '<div style="color:red;font-size:13px;">DEBUG: Query result: ' . htmlspecialchars(json_encode($reset)) . '</div>';
+            if ($reset) {
+                $expiresAtTs = strtotime($reset['expires_at']);
+                $nowTs = time();
+                if ($expiresAtTs >= $nowTs) {
+                    // Mark OTP as used
+                    $stmt = $conn->prepare("UPDATE password_resets SET used = 1 WHERE id = ?");
+                    $stmt->execute([$reset['id']]);
+                    $_SESSION['otp_verified'] = true;
+                    $msg = "✅ OTP verified. Please enter your new password.";
+                    $step = 3;
+                } else {
+                    $msg = "❌ Invalid or expired OTP.";
+                    $step = 2;
+                }
+            } else {
+                $msg = "❌ Invalid or expired OTP.";
+                $step = 2;
+            }
+        } else {
+            $msg = "❌ Session expired. Please start again.";
+            $step = 1;
+        }
+    }
+}
+
+// Step 3: Enter new password
+elseif (isset($_POST['step']) && $_POST['step'] == '3') {
     $new_password      = trim($_POST['new_password']);
     $confirm_password  = trim($_POST['confirm_password']);
-
-    if ($username_or_email === "" || $new_password === "" || $confirm_password === "") {
+    $customer_id = $_SESSION['reset_customer_id'] ?? null;
+    if ($new_password === "" || $confirm_password === "") {
         $msg = "⚠️ Please fill in all fields.";
+        $step = 3;
     } elseif ($new_password !== $confirm_password) {
         $msg = "❌ Passwords do not match.";
+        $step = 3;
+    } elseif (!isset($_SESSION['otp_verified']) || !$_SESSION['otp_verified']) {
+        $msg = "❌ OTP not verified.";
+        $step = 1;
     } else {
         // ✅ Validate password strength (Uppercase + Special + Min 6 chars)
         if (!preg_match('/^(?=.*[A-Z])(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{6,}$/', $new_password)) {
             $msg = "❌ Password must be at least 6 characters and include an uppercase letter and special character.";
+            $step = 3;
         } else {
-            $stmt = $conn->prepare("
-                SELECT customer_id 
-                FROM customers 
-                WHERE customer_username = ? OR customer_email = ? 
-                LIMIT 1
-            ");
-            $stmt->execute([$username_or_email, $username_or_email]);
-            $customer = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            if ($customer) {
-                $hashed = password_hash($new_password, PASSWORD_DEFAULT);
-                $stmt = $conn->prepare("UPDATE customers SET customer_password = ? WHERE customer_id = ?");
-                $stmt->execute([$hashed, $customer['customer_id']]);
-                $msg = "✅ Password successfully updated! You can now login.";
-            } else {
-                $msg = "❌ Account not found.";
-            }
+            $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+            $stmt = $conn->prepare("UPDATE customers SET customer_password = ? WHERE customer_id = ?");
+            $stmt->execute([$hashed, $customer_id]);
+            $msg = "✅ Password successfully updated! You can now login.";
+            unset($_SESSION['reset_customer_id']);
+            unset($_SESSION['reset_email']);
+            unset($_SESSION['otp_verified']);
+            $step = 4;
         }
     }
+}
+elseif (isset($_SESSION['reset_customer_id']) && isset($_SESSION['otp_verified']) && $_SESSION['otp_verified']) {
+    $step = 3;
+}
+else {
+    $step = 1;
 }
 ?>
 <!DOCTYPE html>
@@ -64,7 +177,7 @@ body {
     border-radius: 20px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.08);
     overflow: hidden;
-    max-width: 1000px;
+    max-width: 1000px;  
     width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -284,12 +397,35 @@ body {
             <p class="msg <?= strpos($msg,'✅')!==false ? 'success' : 'error' ?>"><?= htmlspecialchars($msg) ?></p>
         <?php endif; ?>
 
+
+        <!-- Step 1: Enter email/username -->
+        <?php if ($step == 1): ?>
         <form method="post" id="resetForm">
+            <input type="hidden" name="step" value="1">
             <div class="form-group">
                 <label for="username_or_email">Email or Username</label>
-                <input type="text" id="username_or_email" name="username_or_email" placeholder="Enter your email or username" required>
+                <input type="text" id="username_or_email" name="username_or_email" placeholder="Enter your email or username" required value="<?= htmlspecialchars($username_or_email ?? '') ?>">
             </div>
-
+            <button type="submit" class="reset-btn">Send OTP</button>
+        </form>
+        <?php elseif ($step == 2): ?>
+        <!-- Step 2: Enter OTP -->
+        <form method="post" id="otpForm">
+            <input type="hidden" name="step" value="2">
+            <div class="form-group">
+                <label for="otp">Enter OTP</label>
+                <input type="text" id="otp" name="otp" placeholder="Enter the OTP sent to your email" required maxlength="6">
+            </div>
+            <button type="submit" class="reset-btn">Verify OTP</button>
+        </form>
+        <div style="margin-top:18px; font-size:14px; color:#555;">
+            We've sent a 6-digit verification code to:<br>
+            <b><?= htmlspecialchars($_SESSION['reset_email'] ?? '') ?></b>
+        </div>
+        <?php elseif ($step == 3): ?>
+        <!-- Step 3: Enter new password -->
+        <form method="post" id="resetForm">
+            <input type="hidden" name="step" value="3">
             <div class="form-group">
                 <label for="new_password">New Password</label>
                 <div class="password-wrapper">
@@ -304,7 +440,6 @@ body {
                 <div class="password-hint">Must include at least 6 characters, one uppercase, and one special character.</div>
                 <div class="password-strength" id="strengthMessage"></div>
             </div>
-
             <div class="form-group">
                 <label for="confirm_password">Confirm Password</label>
                 <div class="password-wrapper">
@@ -317,9 +452,11 @@ body {
                     </span>
                 </div>
             </div>
-
             <button type="submit" class="reset-btn">Update Password</button>
         </form>
+        <?php elseif ($step == 4): ?>
+        <div class="msg success">✅ Password successfully updated! You can now <a href="customer_login.php">login</a>.</div>
+        <?php endif; ?>
 
         <div class="back-link">
             <a href="customer_login.php">← Back to Login</a>

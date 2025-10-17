@@ -467,15 +467,20 @@ body { font-family: 'Courier New', Courier, monospace; background: #f2f2f2; colo
         </div>
 
         <div class="total-summary">
-            <div>
-                <span>Total Items:</span>
-                <span><?= $totalItems ?></span>
-            </div>
-            <div>
-                <span>Total Amount:</span>
-                <span>₱<?= number_format($order['total_amount'], 2) ?></span>
-            </div>
-        </div>
+    <div>
+        <span>Subtotal:</span>
+        <span>₱<?= number_format($order['total_amount'] - $order['shipping_fee'], 2) ?></span>
+    </div>
+    <div>
+        <span>Shipping Fee:</span>
+        <span>₱<?= number_format($order['shipping_fee'], 2) ?></span>
+    </div>
+    <div>
+        <span>Total Amount:</span>
+        <span>₱<?= number_format($order['total_amount'], 2) ?></span>
+    </div>
+</div>
+
         
         <div class="action-buttons">
             <a href="my_orders.php" class="btn btn-primary">View My Orders</a>

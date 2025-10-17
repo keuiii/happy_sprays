@@ -5,7 +5,6 @@ ini_set('log_errors', 1);
 
 session_start();
 require_once '../classes/database.php';
-
 header('Content-Type: application/json');
 
 try {
@@ -31,12 +30,10 @@ try {
         echo json_encode(['success' => false, 'message' => 'Invalid order or product']);
         exit;
     }
-
     if ($rating < 1 || $rating > 5) {
         echo json_encode(['success' => false, 'message' => 'Rating must be between 1 and 5']);
         exit;
     }
-
     if (empty($comment)) {
         echo json_encode(['success' => false, 'message' => 'Please write a comment']);
         exit;
@@ -55,7 +52,6 @@ try {
         echo json_encode(['success' => false, 'message' => 'Order not found']);
         exit;
     }
-
     if ($order['customer_id'] != $customerId) {
         echo json_encode(['success' => false, 'message' => 'Unauthorized access']);
         exit;
@@ -68,11 +64,9 @@ try {
     }
 
     // Check 7-day limit from order creation date
-    // Note: Since we don't track status change date, we use order creation date
     $completedDate = new DateTime($order['created_at']);
     $now = new DateTime();
     $daysDiff = $now->diff($completedDate)->days;
-
     if ($daysDiff > 7) {
         echo json_encode(['success' => false, 'message' => 'Review period has expired (7 days limit)']);
         exit;
@@ -80,22 +74,13 @@ try {
 
     // Verify the product is in the order
     $orderProducts = $db->getOrderProducts($orderId);
-    
-    // Debug logging
-    error_log("Order ID: " . $orderId . ", Perfume ID to match: " . $perfumeId);
-    error_log("Order products: " . print_r($orderProducts, true));
-    
     $productFound = false;
     foreach ($orderProducts as $product) {
-        error_log("Checking product - perfume_id: " . ($product['perfume_id'] ?? 'NULL') . " vs " . $perfumeId);
         if (isset($product['perfume_id']) && $product['perfume_id'] == $perfumeId) {
             $productFound = true;
             break;
         }
     }
-    
-    error_log("Product found: " . ($productFound ? 'YES' : 'NO'));
-
     if (!$productFound) {
         echo json_encode(['success' => false, 'message' => 'Product not found in this order']);
         exit;
@@ -107,12 +92,45 @@ try {
         exit;
     }
 
-    // Submit review
+    // Add review record
     $result = $db->addReview($orderId, $customerId, $perfumeId, $rating, $comment);
+    if (!$result['success']) {
+        echo json_encode($result);
+        exit;
+    }
 
-    echo json_encode($result);
+    $reviewId = $result['review_id'] ?? null;
+
+    // ✅ Handle optional image upload
+    if (isset($_FILES['review_image']) && $_FILES['review_image']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = '../uploads/reviews/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        $tmpName = $_FILES['review_image']['tmp_name'];
+        $originalName = basename($_FILES['review_image']['name']);
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $newFileName = uniqid('review_', true) . '.' . $ext;
+        $filePath = $uploadDir . $newFileName;
+
+        if (move_uploaded_file($tmpName, $filePath)) {
+            // Save image info in DB
+            $conn = $db->getConnection();
+            $stmt = $conn->prepare("
+                INSERT INTO images (perfume_id, order_id, customer_id, file_name, file_path, uploaded_at, image_type)
+                VALUES (?, ?, ?, ?, ?, NOW(), 'review')
+            ");
+            $stmt->execute([$perfumeId, $orderId, $customerId, $newFileName, 'uploads/reviews/' . $newFileName]);
+        } else {
+            error_log("❌ Failed to move uploaded image");
+        }
+    }
+
+    echo json_encode(['success' => true, 'message' => 'Review submitted successfully!']);
 
 } catch (Exception $e) {
     error_log("Submit review error: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine());
     echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
 }
+?>

@@ -186,10 +186,21 @@ public function insert($query, $params = []) {
             return "Registration failed. Please try again.";
         }
     }
-    public function getCurrentUserId() {
-        $this->startSession();
-        return $_SESSION['user_id'] ?? null;
-        }
+public function getCurrentUserId() {
+    $this->startSession();
+
+    if (isset($_SESSION['customer_id'])) {
+        return $_SESSION['customer_id'];
+    } elseif (isset($_SESSION['admin_id'])) {
+        return $_SESSION['admin_id'];
+    } elseif (isset($_SESSION['user_id'])) {
+        // fallback if older code still sets this
+        return $_SESSION['user_id'];
+    }
+
+    return null;
+}
+
 
     // =================================================================
     // UNIFIED LOGIN (Admins + Customers)
@@ -492,78 +503,122 @@ public function fetchAll($query, $params = []) {
 // Method 2: UPDATE existing updateOrderStatus to include timestamp
 public function updateOrderStatus($order_id, $status) {
     try {
-        $validStatuses = ['pending', 'processing', 'out for delivery', 'received', 'cancelled', 'completed'];
+        // Valid statuses in lowercase
+        $validStatuses = ['pending', 'processing', 'out for delivery', 'delivered', 'cancelled'];
+        
+        // Normalize the incoming status
         $statusLower = strtolower(trim($status));
         
+        error_log("=== updateOrderStatus DEBUG ===");
+        error_log("Order ID: $order_id");
+        error_log("Raw status received: '$status'");
+        error_log("Normalized status: '$statusLower'");
+        
+        // Validate status
         if (!in_array($statusLower, $validStatuses)) {
+            error_log("ERROR: Invalid status '$statusLower'. Valid statuses: " . implode(', ', $validStatuses));
             return ['success' => false, 'message' => 'Invalid status: ' . $status];
         }
 
-        // Update order status
+        // Check if order exists first
+        $currentOrder = $this->fetch("SELECT order_id, order_status FROM orders WHERE order_id = ?", [$order_id]);
+        
+        if (!$currentOrder) {
+            error_log("ERROR: Order $order_id not found");
+            return ['success' => false, 'message' => 'Order not found'];
+        }
+        
+        error_log("Current order status in DB: '{$currentOrder['order_status']}'");
+        
+        // CRITICAL FIX: Update status AND timestamp
         $stmt = $this->connection->prepare("
             UPDATE orders 
-            SET order_status = ?
+            SET order_status = ?,
+                status_updated_at = NOW()
             WHERE order_id = ?
         ");
-        $stmt->execute([$status, $order_id]);
-
-        if ($stmt->rowCount() > 0) {
+        
+        $executed = $stmt->execute([$statusLower, $order_id]);
+        
+        if (!$executed) {
+            $errorInfo = $stmt->errorInfo();
+            error_log("ERROR: SQL execution failed: " . implode(' | ', $errorInfo));
+            return ['success' => false, 'message' => 'Database update failed: ' . $errorInfo[2]];
+        }
+        
+        $rowCount = $stmt->rowCount();
+        error_log("SQL executed successfully. Rows affected: $rowCount");
+        
+        // Verify the update
+        $updatedOrder = $this->fetch("SELECT order_status, status_updated_at FROM orders WHERE order_id = ?", [$order_id]);
+        error_log("New status in DB after update: '{$updatedOrder['order_status']}'");
+        error_log("Status updated at: " . ($updatedOrder['status_updated_at'] ?? 'NULL'));
+        
+        // Check if the update was successful
+        if ($updatedOrder['order_status'] === $statusLower) {
             return ['success' => true, 'message' => 'Order status updated successfully'];
         } else {
-            $orderExists = $this->fetch("SELECT order_id FROM orders WHERE order_id = ?", [$order_id]);
-            if (!$orderExists) {
-                return ['success' => false, 'message' => 'Order not found'];
-            }
-            return ['success' => true, 'message' => 'Order status is already set to this value'];
+            error_log("WARNING: Status didn't change. Expected '$statusLower', got '{$updatedOrder['order_status']}'");
+            return ['success' => false, 'message' => 'Status update failed - database not updated'];
         }
+        
     } catch (Exception $e) {
-        error_log("Update order status error: " . $e->getMessage());
+        error_log("EXCEPTION in updateOrderStatus: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
         return ['success' => false, 'message' => 'Database error: ' . $e->getMessage()];
     }
 }
-
-    public function getOrderStatuses() {
-        return [
-            'processing' => 'Processing',
-            'out for delivery' => 'Out for Delivery',
-            'received' => 'Received',
-            'cancelled' => 'Cancelled'
-        ];
-    }
+public function getOrderStatuses() {
+    return [
+        'pending' => 'Pending',
+        'processing' => 'Processing',
+        'out for delivery' => 'Out for Delivery',
+        'delivered' => 'Delivered',
+        'cancelled' => 'Cancelled'
+    ];
+}
 
     public function getOrdersByStatus($status) {
-        try {
-            return $this->select("SELECT * FROM orders WHERE order_status = ? ORDER BY o_created_at DESC", [$status]);
-        } catch (Exception $e) {
-            error_log("Get orders by status error: " . $e->getMessage());
-            return [];
-        }
+    try {
+        $statusLower = strtolower($status);
+        return $this->select(
+            "SELECT * FROM orders WHERE LOWER(order_status) = ? ORDER BY o_created_at DESC", 
+            [$statusLower]
+        );
+    } catch (Exception $e) {
+        error_log("Get orders by status error: " . $e->getMessage());
+        return [];
     }
+}
 
     public function getOrderStats() {
-        try {
-            $stats = [];
-            
-            // Count all statuses that actually exist in the database
-            $allStatuses = ['pending', 'processing', 'out for delivery', 'received', 'cancelled'];
-            
-            foreach ($allStatuses as $status) {
-                $row = $this->fetch("SELECT COUNT(order_id) AS order_count FROM orders WHERE order_status = ?",[$status]);
-                $stats[$status] = $row['order_count'] ?? 0;
-            }
-
-            // overall stats
-            $row = $this->fetch("SELECT COUNT(order_id) AS total_orders, SUM(total_amount) AS total_revenue FROM orders");
-
-            $stats['total_orders'] = $row['total_orders'] ?? 0;
-            $stats['total_revenue'] = $row['total_revenue'] ?? 0;
-
-            return $stats;
-        } catch (Exception $e) {
-            error_log("Get order stats error: " . $e->getMessage());
-            return [];
+    try {
+        $stats = [];
+        
+        // Count all statuses (lowercase)
+        $allStatuses = ['pending', 'processing', 'out for delivery', 'delivered', 'cancelled'];
+        
+        foreach ($allStatuses as $status) {
+            $row = $this->fetch("SELECT COUNT(order_id) AS order_count FROM orders WHERE LOWER(order_status) = ?", [$status]);
+            $stats[$status] = $row['order_count'] ?? 0;
         }
+
+        // Also count 'completed' as 'delivered' for legacy data
+        $completedRow = $this->fetch("SELECT COUNT(order_id) AS order_count FROM orders WHERE LOWER(order_status) = 'completed'");
+        $stats['delivered'] += ($completedRow['order_count'] ?? 0);
+
+        // Overall stats
+        $row = $this->fetch("SELECT COUNT(order_id) AS total_orders, SUM(total_amount) AS total_revenue FROM orders");
+
+        $stats['total_orders'] = $row['total_orders'] ?? 0;
+        $stats['total_revenue'] = $row['total_revenue'] ?? 0;
+
+        return $stats;
+    } catch (Exception $e) {
+        error_log("Get order stats error: " . $e->getMessage());
+        return [];
     }
+}
 
     public function searchOrders($search_term, $limit = null, $offset = 0) {
         try {
@@ -702,26 +757,26 @@ public function getCustomerOrderItems($order_id) {
     }
 
     public function getCustomerOrdersByStatus($status, $customer_id = null) {
-        try {
-            if ($customer_id === null) {
-                $customer_id = $this->getCurrentCustomerId();
-            }
-            
-            if (!$customer_id) {
-                return [];
-            }
-            
-            return $this->select(
-                "SELECT * FROM orders WHERE customer_id = ? AND order_status = ? ORDER BY o_created_at DESC",
-                [$customer_id, $status]
-            );
-            
-        } catch (Exception $e) {
-            error_log("Get customer orders by status error: " . $e->getMessage());
+    try {
+        if ($customer_id === null) {
+            $customer_id = $this->getCurrentCustomerId();
+        }
+        
+        if (!$customer_id) {
             return [];
         }
+        
+        $statusLower = strtolower($status);
+        return $this->select(
+            "SELECT * FROM orders WHERE customer_id = ? AND LOWER(order_status) = ? ORDER BY o_created_at DESC",
+            [$customer_id, $statusLower]
+        );
+        
+    } catch (Exception $e) {
+        error_log("Get customer orders by status error: " . $e->getMessage());
+        return [];
     }
-
+}
     public function getCustomerRecentOrders($limit = 5, $customer_id = null) {
         return $this->getCustomerOrders($customer_id, $limit);
     }
@@ -729,30 +784,34 @@ public function getCustomerOrderItems($order_id) {
     // =================================================================
     // ORDER HELPER FORMATTING METHODS
     // =================================================================
+public function formatOrderStatus($status) {
+    $map = [
+        'pending'          => 'Pending',
+        'processing'       => 'Processing',
+        'preparing'        => 'Preparing',
+        'out for delivery' => 'Out for Delivery',
+        'delivered'        => 'Delivered',
+        'cancelled'        => 'Cancelled',
 
-    public function formatOrderStatus($status) {
-        $map = [
-            'pending'    => 'Pending',
-            'processing' => 'Processing',
-            'preparing' => 'Preparing',
-            'out for delivery' => 'Out for Delivery',
-            'received'  => 'Received',
-            'cancelled'  => 'Cancelled'
-        ];
-        return $map[strtolower($status)] ?? ucfirst($status);
-    }
-
-    public function getOrderStatusClass($status) {
-        $map = [
-            'pending'    => 'status-pending',
-            'processing' => 'status-processing',
-            'preparing' => 'status-preparing',
-            'out for delivery' => 'status-shipping',
-            'received'  => 'status-delivered',
-            'cancelled'  => 'status-cancelled'
-        ];
-        return $map[strtolower($status)] ?? '';
-    }
+        'completed'        => 'Delivered',
+        'received'         => 'Delivered'
+    ];
+    return $map[strtolower($status)] ?? ucfirst($status);
+}
+public function getOrderStatusClass($status) {
+    $map = [
+        'pending'          => 'status-pending',
+        'processing'       => 'status-processing',
+        'preparing'        => 'status-preparing',
+        'out for delivery' => 'status-shipping',
+        'delivered'        => 'status-delivered',
+        'cancelled'        => 'status-cancelled',
+   
+        'completed'        => 'status-delivered', 
+        'received'         => 'status-delivered'
+    ];
+    return $map[strtolower($status)] ?? '';
+}
 
     public function formatPrice($amount) {
         return "₱" . number_format((float)$amount, 2);
@@ -1083,37 +1142,38 @@ public function addToCart($id, $name, $price, $image = '', $qty = 1) {
     // ORDER CREATION METHODS - FIXED
     // =================================================================
     
-    public function createOrder($customerId, $cartItems, $totalAmount, $paymentMethod, $gcashProof = null) {
-        try {
-            $this->connection->beginTransaction();
-            
-            $orderId = $this->insert(
-                "INSERT INTO orders (customer_id, payment_method, total_amount, gcash_proof, order_status, o_created_at) 
-                 VALUES (?, ?, ?, ?, 'pending', NOW())",
-                [$customerId, $paymentMethod, $totalAmount, $gcashProof]
+    public function createOrder($customerId, $cartItems, $totalAmount, $paymentMethod, $gcashProof = null, $shippingFee = 0) {
+    try {
+        $this->connection->beginTransaction();
+        
+        // Insert order with 'pending' as default status
+        $orderId = $this->insert(
+            "INSERT INTO orders (customer_id, payment_method, total_amount, shipping_fee, gcash_proof, order_status, o_created_at) 
+             VALUES (?, ?, ?, ?, ?, 'pending', NOW())",
+            [$customerId, $paymentMethod, $totalAmount, $shippingFee, $gcashProof]
+        );
+        
+        foreach ($cartItems as $perfumeId => $item) {
+            $this->insert(
+                "INSERT INTO order_items (order_id, perfume_id, order_quantity, order_price) 
+                 VALUES (?, ?, ?, ?)",
+                [$orderId, $perfumeId, $item['quantity'], $item['price']]
             );
             
-            foreach ($cartItems as $perfumeId => $item) {
-                $this->insert(
-                    "INSERT INTO order_items (order_id, perfume_id, order_quantity, order_price) 
-                     VALUES (?, ?, ?, ?)",
-                    [$orderId, $perfumeId, $item['quantity'], $item['price']]
-                );
-                
-                $this->update(
-                    "UPDATE perfumes SET stock = stock - ? WHERE perfume_id = ?",
-                    [$item['quantity'], $perfumeId]
-                );
-            }
-            
-            $this->connection->commit();
-            return $orderId;
-            
-        } catch (Exception $e) {
-            $this->connection->rollBack();
-            throw new Exception("Order creation failed: " . $e->getMessage());
+            $this->update(
+                "UPDATE perfumes SET stock = stock - ? WHERE perfume_id = ?",
+                [$item['quantity'], $perfumeId]
+            );
         }
+        
+        $this->connection->commit();
+        return $orderId;
+        
+    } catch (Exception $e) {
+        $this->connection->rollBack();
+        throw new Exception("Order creation failed: " . $e->getMessage());
     }
+}
     
     // =================================================================
     // CHECKOUT HELPER METHODS
@@ -1148,40 +1208,61 @@ public function addToCart($id, $name, $price, $image = '', $qty = 1) {
         return $errors;
     }
     
-    public function processCheckout($data, $files) {
-        if ($this->isCartEmpty()) {
-            throw new Exception("Your cart is empty.");
+    // Example inside Database::processCheckout($data, $files)
+public function processCheckout($data, $files) {
+    $pdo = $this->connection;
+    try {
+        $pdo->beginTransaction();
+
+        // 1) Calculate cart subtotal
+        $cartSummary = $this->getCheckoutSummary($_SESSION['selected_cart_items'] ?? null);
+        $subtotal = floatval($cartSummary['total']);
+
+        // 2) Shipping fee from $data
+        $shipping_fee = isset($data['shipping_fee']) ? floatval($data['shipping_fee']) : 0.00;
+
+        // 3) Compute total
+        $total_amount = $subtotal + $shipping_fee;
+
+        // Handle GCash proof upload if payment method is GCash
+        $gcash_proof = null;
+        if (($data['payment_method'] ?? '') === 'GCash' && !empty($files['gcash_ref']['name'])) {
+            $gcash_proof = $this->handleProofUpload($files['gcash_ref']);
         }
-        
-        $errors = $this->validateCheckoutData($data);
-        if (!empty($errors)) {
-            throw new Exception(implode(' ', $errors));
+
+        // 4) Insert into orders table with 'pending' status
+        $stmt = $pdo->prepare("INSERT INTO orders 
+            (customer_id, payment_method, total_amount, shipping_fee, gcash_proof, order_status, o_created_at)
+            VALUES (?, ?, ?, ?, ?, 'pending', NOW())");
+
+        $customer_id = $this->getCurrentCustomerId();
+        $payment_method = $data['payment_method'] ?? 'Cash on Delivery';
+
+        $stmt->execute([$customer_id, $payment_method, $total_amount, $shipping_fee, $gcash_proof]);
+        $orderId = $pdo->lastInsertId();
+
+        // 5) Insert order_items
+        foreach ($cartSummary['items'] as $productId => $item) {
+            $stmt2 = $pdo->prepare("INSERT INTO order_items (order_id, perfume_id, order_price, order_quantity) VALUES (?, ?, ?, ?)");
+            $stmt2->execute([$orderId, $productId, $item['price'], $item['quantity']]);
+            
+            // Update stock
+            $this->update(
+                "UPDATE perfumes SET stock = stock - ? WHERE perfume_id = ?",
+                [$item['quantity'], $productId]
+            );
         }
-        
-        $cartItems = $this->getCartItems();
-        $grandTotal = $this->calculateGrandTotal();
-        
-        $proofFileName = null;
-        if ($data['payment_method'] === 'gcash' && !empty($files['gcash_ref']['name'])) {
-            $proofFileName = $this->handleProofUpload($files['gcash_ref']);
-        }
-        
-        $customerData = [
-            'name' => trim($data['name']),
-            'email' => trim($data['email']),
-            'phone' => trim($data['phone'] ?? ''),
-            'address' => $this->formatAddress($data),
-            'payment_method' => $data['payment_method'],
-            'proof_of_payment' => $proofFileName
-        ];
-        
-        $orderId = $this->createOrderWithDetails($customerData, $cartItems, $grandTotal);
-        
-        $this->clearCart();
-        
+
+        // 6) Clear cart, commit
+        $pdo->commit();
+
         return $orderId;
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        throw $e;
     }
-    
+}
+
     private function formatAddress($data) {
         return trim($data['street']) . ', ' . 
                trim($data['barangay'] ?? '') . ', ' .
@@ -1384,6 +1465,7 @@ public function saveAdminReply($messageId, $replyMessage) {
     return $stmt->execute();
 }
 
+
 // ==================== REVIEWS METHODS ====================
 
 public function addReview($orderId, $customerId, $perfumeId, $rating, $comment) {
@@ -1449,6 +1531,13 @@ public function getAllReviews($limit = null, $offset = 0) {
         return [];
     }
 }
+
+public function getReviewImages($order_id) {
+    $stmt = $this->conn->prepare("SELECT file_path FROM images WHERE order_id = ? AND image_type = 'review'");
+    $stmt->execute([$order_id]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
 
 public function hasReviewed($orderId, $customerId, $perfumeId) {
     try {
